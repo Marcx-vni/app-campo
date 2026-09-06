@@ -73,10 +73,15 @@ function getUserDisplayName() {
   return activeAccount ? (activeAccount.name || activeAccount.username) : null;
 }
 
+// E-mail completo da conta Microsoft logada.
+function getUserEmail() {
+  return activeAccount ? activeAccount.username || null : null;
+}
+
 // Parte antes do "@" do e-mail da conta Microsoft logada — usada apenas como
 // registro de auditoria (coluna "Usuario"), sem nenhuma ligação com o
 // cadastro de Meeiros da planilha.
 function getUserEmailPrefix() {
-  if (!activeAccount || !activeAccount.username) return null;
-  return activeAccount.username.split("@")[0] || null;
+  const email = getUserEmail();
+  return email ? email.split("@")[0] || null : null;
 }

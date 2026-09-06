@@ -1,38 +1,41 @@
 // ============================================================================
 // T1 — MINHAS ORDENS
-// Lista de cards filtrada por Meeiro logado e Situação <> Executada.
+// Lista de cards filtrada pelo e-mail de quem logou (coluna "E-mail" da
+// tabela Ordens) e Situação <> Executada. Sem nenhuma seleção manual —
+// cada pessoa só vê as ordens atribuídas ao e-mail com que ela entrou.
 // Atrasadas (Data Prevista < hoje) aparecem primeiro, em vermelho.
 // ============================================================================
 
+// Lembrete do último Meeiro escolhido no formulário de Apontamento Livre
+// (só conveniência de preenchimento — sem relação com login/e-mail).
 const MEEIRO_STORAGE_KEY = "app_campo_meeiro_codigo";
 
 function getMeeiroSelecionado() {
   return localStorage.getItem(MEEIRO_STORAGE_KEY);
 }
 
+function normalizeEmail(s) {
+  return String(s || "").trim().toLowerCase();
+}
+
 const ScreenOrdens = {
   async render(container) {
-    const meeiroCod = getMeeiroSelecionado();
-    if (!meeiroCod) {
-      return this.renderSeletorMeeiro(container);
-    }
-
     container.innerHTML = `
       <h2 class="page-title">Minhas Ordens</h2>
       <div id="ordens-list">Carregando...</div>
     `;
 
-    const { ordens, meeiros } = await getLookupData();
-    const meeiro = meeiros.find((m) => m.__cod === meeiroCod);
+    const { ordens } = await getLookupData();
+    const meuEmail = normalizeEmail(typeof getUserEmail === "function" ? getUserEmail() : null);
 
     const minhas = ordens
-      .filter((o) => o["Código Meeiro"] === meeiroCod && o["Situação"] !== "Executada")
+      .filter((o) => normalizeEmail(o["E-mail"]) === meuEmail && o["Situação"] !== "Executada")
       .map((o) => ({ ...o, atrasada: isAtrasada(o["Data Prevista"]) }))
       .sort((a, b) => (a.atrasada === b.atrasada ? 0 : a.atrasada ? -1 : 1));
 
     const list = container.querySelector("#ordens-list");
     if (minhas.length === 0) {
-      list.innerHTML = `<div class="empty-state">Nenhuma ordem pendente para ${meeiro ? meeiro["Meeiro"] : meeiroCod}.</div>`;
+      list.innerHTML = `<div class="empty-state">Nenhuma ordem pendente para o seu e-mail.</div>`;
       return;
     }
 
@@ -52,26 +55,6 @@ const ScreenOrdens = {
 
     list.querySelectorAll(".card").forEach((card) => {
       card.addEventListener("click", () => navigate("ordem", { id: card.dataset.id }));
-    });
-  },
-
-  async renderSeletorMeeiro(container) {
-    container.innerHTML = `<h2 class="page-title">Meeiro deste aparelho</h2><div id="meeiro-picker">Carregando...</div>`;
-    const { meeiros } = await getLookupData();
-    const picker = container.querySelector("#meeiro-picker");
-    picker.innerHTML = `
-      <p class="muted">Selecione qual Meeiro este aparelho representa, para filtrar as ordens. Isso fica salvo neste aparelho e pode ser trocado depois.</p>
-      <select id="select-meeiro">
-        <option value="">Selecione...</option>
-        ${meeiros.map((m) => `<option value="${m.__cod}">${escapeHtml(m["Meeiro"])}</option>`).join("")}
-      </select>
-      <button id="btn-confirmar-meeiro" class="btn btn-primary btn-block">Confirmar</button>
-    `;
-    picker.querySelector("#btn-confirmar-meeiro").addEventListener("click", () => {
-      const val = picker.querySelector("#select-meeiro").value;
-      if (!val) return;
-      localStorage.setItem(MEEIRO_STORAGE_KEY, val);
-      this.render(container);
     });
   },
 };
