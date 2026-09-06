@@ -67,7 +67,7 @@ async function refreshLookupCache() {
 
 async function getLookupData() {
   // tenta usar cache local primeiro (funciona offline); se vazio, busca da rede
-  const keys = ["produtos", "meeiros", "estufas", "operacoes", "ordens", "fornecedores", "clientes"];
+  const keys = ["produtos", "produtosVenda", "meeiros", "estufas", "operacoes", "ordens", "fornecedores", "clientes"];
   const cached = await Promise.all(keys.map((k) => cacheGet(k)));
   if (cached.every((v) => v && v.length !== undefined)) {
     return Object.fromEntries(keys.map((k, i) => [k, cached[i]]));
@@ -83,6 +83,12 @@ function generateLocalId() {
 }
 
 async function queueAdd(apontamento) {
+  // Preenche "Usuario" (auditoria) com a parte antes do "@" da conta Microsoft
+  // logada — não tem nenhuma relação com o "Código Meeiro" escolhido no formulário.
+  if (apontamento.fields && !apontamento.fields["Usuario"]) {
+    apontamento.fields["Usuario"] =
+      typeof getUserEmailPrefix === "function" ? getUserEmailPrefix() : null;
+  }
   const item = {
     localId: generateLocalId(),
     status: "pendente",

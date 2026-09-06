@@ -56,11 +56,11 @@ const ScreenOrdens = {
   },
 
   async renderSeletorMeeiro(container) {
-    container.innerHTML = `<h2 class="page-title">Quem está lançando?</h2><div id="meeiro-picker">Carregando...</div>`;
+    container.innerHTML = `<h2 class="page-title">Meeiro deste aparelho</h2><div id="meeiro-picker">Carregando...</div>`;
     const { meeiros } = await getLookupData();
     const picker = container.querySelector("#meeiro-picker");
     picker.innerHTML = `
-      <p class="muted">Selecione seu nome para ver suas ordens. Isso fica salvo neste aparelho.</p>
+      <p class="muted">Selecione qual Meeiro este aparelho representa, para filtrar as ordens. Isso fica salvo neste aparelho e pode ser trocado depois.</p>
       <select id="select-meeiro">
         <option value="">Selecione...</option>
         ${meeiros.map((m) => `<option value="${m.__cod}">${escapeHtml(m["Meeiro"])}</option>`).join("")}

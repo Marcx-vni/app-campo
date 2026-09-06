@@ -30,6 +30,7 @@ const TABLES = {
   apontamentos: "Apontamentos",
   ordens: "Ordens",
   produtos: "Tabela613",
+  produtosVenda: "ProdVenda", // lista de produtos vendáveis (aba "Cadastro de Venda"), coluna "Tipo"
   operacao: "Operacao",
   fornecedor: "Fornecedor",
   estufas: "Estufas",

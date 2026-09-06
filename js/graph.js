@@ -145,9 +145,10 @@ function comCodigoNormalizado(lista) {
 }
 
 async function fetchLookupData() {
-  const [produtos, meeiros, estufas, operacoes, ordens, fornecedores, clientes] =
+  const [produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes] =
     await Promise.all([
       readTable(TABLES.produtos),
+      readTable(TABLES.produtosVenda),
       readTable(TABLES.meeiros),
       readTable(TABLES.estufas),
       readTable(TABLES.operacao),
@@ -157,5 +158,5 @@ async function fetchLookupData() {
     ]);
   comCodigoNormalizado(meeiros);
   comCodigoNormalizado(estufas);
-  return { produtos, meeiros, estufas, operacoes, ordens, fornecedores, clientes };
+  return { produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes };
 }

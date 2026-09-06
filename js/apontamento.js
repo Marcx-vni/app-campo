@@ -83,8 +83,13 @@ function validateBeforeSend(fields, lookups) {
     if (fields["Código Estufa"] && !lookups.estufas.some((e) => e.__cod === fields["Código Estufa"])) {
       return "Estufa inexistente";
     }
-    if (fields["Produto"] && !lookups.produtos.some((p) => p["Produto"] === fields["Produto"])) {
-      return "Produto inexistente";
+    if (fields["Produto"]) {
+      // Na Venda, a lista válida de produtos é a de "Cadastro de Venda" (coluna "Tipo").
+      const listaValida =
+        bloco === "Venda"
+          ? (lookups.produtosVenda || []).some((p) => p["Tipo"] === fields["Produto"])
+          : lookups.produtos.some((p) => p["Produto"] === fields["Produto"]);
+      if (!listaValida) return "Produto inexistente";
     }
     if (fields["Operação"] && !lookups.operacoes.some((o) => o["Operação"] === fields["Operação"])) {
       return "Operação inexistente";

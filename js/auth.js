@@ -72,3 +72,11 @@ function isLoggedIn() {
 function getUserDisplayName() {
   return activeAccount ? (activeAccount.name || activeAccount.username) : null;
 }
+
+// Parte antes do "@" do e-mail da conta Microsoft logada — usada apenas como
+// registro de auditoria (coluna "Usuario"), sem nenhuma ligação com o
+// cadastro de Meeiros da planilha.
+function getUserEmailPrefix() {
+  if (!activeAccount || !activeAccount.username) return null;
+  return activeAccount.username.split("@")[0] || null;
+}

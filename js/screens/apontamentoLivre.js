@@ -31,10 +31,18 @@ const ScreenApontamentoLivre = {
 
   renderForm(form, lookups) {
     const meeiroCod = getMeeiroSelecionado();
-    const produtoOptions = lookups.produtos
-      .filter((p) => p["Produto"])
-      .map((p) => `<option value="${escapeHtml(p["Produto"])}">${escapeHtml(p["Produto"])}</option>`)
-      .join("");
+    // Na Venda, a lista de produtos vem da aba "Cadastro de Venda" (coluna "Tipo"),
+    // não do cadastro geral de produtos usado em Uso/Ferti/Compra.
+    const produtoOptions =
+      this.bloco === "Venda"
+        ? (lookups.produtosVenda || [])
+            .filter((p) => p["Tipo"])
+            .map((p) => `<option value="${escapeHtml(p["Tipo"])}">${escapeHtml(p["Tipo"])}</option>`)
+            .join("")
+        : lookups.produtos
+            .filter((p) => p["Produto"])
+            .map((p) => `<option value="${escapeHtml(p["Produto"])}">${escapeHtml(p["Produto"])}</option>`)
+            .join("");
     const estufaOptions = lookups.estufas
       .map((e) => `<option value="${e.__cod}">${escapeHtml(e["Estufa"])}</option>`)
       .join("");
@@ -109,7 +117,7 @@ const ScreenApontamentoLivre = {
 
       ${
         this.bloco !== "Compra"
-          ? `<label>Quem está lançando</label><select id="f-meeiro" required><option value="">Selecione...</option>${meeiroOptions}</select>`
+          ? `<label>Meeiro</label><select id="f-meeiro" required><option value="">Selecione...</option>${meeiroOptions}</select>`
           : ""
       }
 
