@@ -40,7 +40,14 @@ async function searchExcelFiles(termo) {
   });
   if (!res.ok) throw new Error(`Graph API ${res.status}: ${await res.text()}`);
   const data = await res.json();
-  return (data.value || []).filter((item) => item.file); // só arquivos, não pastas
+  const termoNorm = (termo || "").toLowerCase().trim();
+  return (data.value || []).filter((item) => {
+    if (!item.file) return false; // só arquivos, não pastas
+    const nome = item.name.toLowerCase();
+    const ehExcel = nome.endsWith(".xlsx") || nome.endsWith(".xlsm") || nome.endsWith(".xls");
+    const contemTermo = !termoNorm || nome.includes(termoNorm);
+    return ehExcel && contemTermo;
+  });
 }
 
 async function graphFetch(path, options = {}) {
