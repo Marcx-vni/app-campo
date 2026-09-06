@@ -36,7 +36,10 @@ const ScreenApontamentoLivre = {
       .map((p) => `<option value="${escapeHtml(p["Produto"])}">${escapeHtml(p["Produto"])}</option>`)
       .join("");
     const estufaOptions = lookups.estufas
-      .map((e) => `<option value="${e["Cod. Estufa"]}">${escapeHtml(e["Estufa"])}</option>`)
+      .map((e) => `<option value="${e.__cod}">${escapeHtml(e["Estufa"])}</option>`)
+      .join("");
+    const meeiroOptions = lookups.meeiros
+      .map((m) => `<option value="${m.__cod}" ${m.__cod === meeiroCod ? "selected" : ""}>${escapeHtml(m["Meeiro"])}</option>`)
       .join("");
     const operacaoOptions = (op) =>
       lookups.operacoes
@@ -106,6 +109,12 @@ const ScreenApontamentoLivre = {
 
       ${
         this.bloco !== "Compra"
+          ? `<label>Quem está lançando</label><select id="f-meeiro" required><option value="">Selecione...</option>${meeiroOptions}</select>`
+          : ""
+      }
+
+      ${
+        this.bloco !== "Compra"
           ? `<label>Estufa</label><select id="f-estufa" required><option value="">Selecione...</option>${estufaOptions}</select>`
           : ""
       }
@@ -128,7 +137,8 @@ const ScreenApontamentoLivre = {
 
       if (bloco !== "Compra") {
         fields["Código Estufa"] = form.querySelector("#f-estufa").value;
-        fields["Código Meeiro"] = meeiroCod;
+        fields["Código Meeiro"] = form.querySelector("#f-meeiro").value;
+        if (fields["Código Meeiro"]) localStorage.setItem(MEEIRO_STORAGE_KEY, fields["Código Meeiro"]);
       }
       fields["Produto"] = form.querySelector("#f-produto").value;
       fields["Complemento"] = form.querySelector("#f-complemento").value;

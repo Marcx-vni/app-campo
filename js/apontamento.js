@@ -77,10 +77,10 @@ function validateBeforeSend(fields, lookups) {
   }
 
   if (lookups) {
-    if (fields["Código Meeiro"] && !lookups.meeiros.some((m) => m["Codigo"] === fields["Código Meeiro"])) {
+    if (fields["Código Meeiro"] && !lookups.meeiros.some((m) => m.__cod === fields["Código Meeiro"])) {
       return "Meeiro inexistente";
     }
-    if (fields["Código Estufa"] && !lookups.estufas.some((e) => e["Cod. Estufa"] === fields["Código Estufa"])) {
+    if (fields["Código Estufa"] && !lookups.estufas.some((e) => e.__cod === fields["Código Estufa"])) {
       return "Estufa inexistente";
     }
     if (fields["Produto"] && !lookups.produtos.some((p) => p["Produto"] === fields["Produto"])) {

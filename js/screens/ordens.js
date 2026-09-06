@@ -23,7 +23,7 @@ const ScreenOrdens = {
     `;
 
     const { ordens, meeiros } = await getLookupData();
-    const meeiro = meeiros.find((m) => m["Codigo"] === meeiroCod);
+    const meeiro = meeiros.find((m) => m.__cod === meeiroCod);
 
     const minhas = ordens
       .filter((o) => o["Código Meeiro"] === meeiroCod && o["Situação"] !== "Executada")
@@ -63,7 +63,7 @@ const ScreenOrdens = {
       <p class="muted">Selecione seu nome para ver suas ordens. Isso fica salvo neste aparelho.</p>
       <select id="select-meeiro">
         <option value="">Selecione...</option>
-        ${meeiros.map((m) => `<option value="${m["Codigo"]}">${escapeHtml(m["Meeiro"])}</option>`).join("")}
+        ${meeiros.map((m) => `<option value="${m.__cod}">${escapeHtml(m["Meeiro"])}</option>`).join("")}
       </select>
       <button id="btn-confirmar-meeiro" class="btn btn-primary btn-block">Confirmar</button>
     `;

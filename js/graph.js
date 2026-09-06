@@ -113,6 +113,37 @@ async function recalculateWorkbook() {
 
 // --- Listas de apoio (cache) --------------------------------------------------
 
+// Normaliza um nome de coluna para comparação tolerante a acento/maiúscula
+// (ex.: "Código", "codigo", "Cód." e "COD" todos viram "cod").
+function normKey(s) {
+  return String(s)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+// Acha, num objeto de linha lida da planilha, a coluna cujo nome normalizado
+// "parece" um código (ex.: "Codigo", "Cód.", "Código Meeiro") — sem depender
+// de acertar de antemão o texto exato usado na planilha do usuário.
+function findCodKey(obj) {
+  const keys = Object.keys(obj).filter((k) => k !== "__rowIndex");
+  const candidates = keys.filter((k) => normKey(k).startsWith("cod"));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => normKey(a).length - normKey(b).length);
+  return candidates[0];
+}
+
+// Adiciona um campo "__cod" a cada linha de uma lista de apoio, apontando
+// para a coluna de código real da planilha (qualquer que seja seu nome exato).
+function comCodigoNormalizado(lista) {
+  lista.forEach((item) => {
+    const k = findCodKey(item);
+    item.__cod = k ? item[k] : undefined;
+  });
+  return lista;
+}
+
 async function fetchLookupData() {
   const [produtos, meeiros, estufas, operacoes, ordens, fornecedores, clientes] =
     await Promise.all([
@@ -124,5 +155,7 @@ async function fetchLookupData() {
       readTable(TABLES.fornecedor),
       readTable(TABLES.cliente).catch(() => []), // tabela pequena, pode não existir em toda planilha
     ]);
+  comCodigoNormalizado(meeiros);
+  comCodigoNormalizado(estufas);
   return { produtos, meeiros, estufas, operacoes, ordens, fornecedores, clientes };
 }
