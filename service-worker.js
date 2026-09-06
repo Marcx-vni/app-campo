@@ -11,6 +11,7 @@ const SHELL_FILES = [
   "./index.html",
   "./manifest.json",
   "./css/styles.css",
+  "./js/vendor/msal-browser.min.js",
   "./js/config.js",
   "./js/auth.js",
   "./js/graph.js",
