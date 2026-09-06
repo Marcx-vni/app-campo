@@ -50,6 +50,24 @@ async function searchExcelFiles(termo) {
   });
 }
 
+// Busca um arquivo diretamente pelo caminho exato no OneDrive — não depende do
+// índice de busca do Graph (que pode demorar a "enxergar" arquivos editados com
+// frequência), então é mais confiável que searchExcelFiles quando já se sabe onde
+// o arquivo está.
+async function getFileByPath(path) {
+  const token = await getAccessToken();
+  const encodedPath = path
+    .split("/")
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("/");
+  const res = await fetch(`${GRAPH_BASE}/me/drive/root:/${encodedPath}?$select=id,name,parentReference,file`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Graph API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 async function graphFetch(path, options = {}) {
   const token = await getAccessToken(); // lança "OFFLINE" se não houver rede e o token expirou
   const res = await fetch(`${workbookBase()}${path}`, {
