@@ -1,10 +1,15 @@
 // ============================================================================
-// TELA INICIAL (Início) — resumo rápido do dia, atalhos, atividade recente
-// (das últimas gravações na planilha) e "Minhas Ordens" (T1: lista de cards
-// filtrada pelo e-mail de quem logou, coluna "E-mail" da tabela Ordens, com
-// Situação <> Executada — atrasadas, Data Prevista < hoje, aparecem primeiro).
-// Antes esse conteúdo todo vivia na aba "Ordens" da navegação; agora tem tela
-// própria porque a aba "Ordens" passou a ser a Consulta de Fertirrigações.
+// TELA INICIAL (Início) — resumo rápido do dia, atalhos e atividade recente
+// (das últimas gravações na planilha). Antes esse conteúdo todo vivia na aba
+// "Ordens" da navegação; agora tem tela própria porque a aba "Ordens" passou
+// a ser a Consulta de Fertirrigações.
+//
+// "Minhas Ordens" (T1: lista de tarefas atribuídas por e-mail, da tabela
+// Ordens/"Ordens de Aplicacao") foi removida por não estar em uso — a
+// planilha nunca chegou a ser preenchida com essas atribuições, então a
+// lista sempre aparecia vazia. O ecrã de detalhe (T2, ordemCard.js) e a
+// tabela "Ordens" continuam existindo caso o recurso volte a ser usado —
+// só não tem mais nenhum link levando até lá.
 // ============================================================================
 
 // Lembrete do último Meeiro escolhido no formulário de Apontamento Livre
@@ -13,10 +18,6 @@ const MEEIRO_STORAGE_KEY = "app_campo_meeiro_codigo";
 
 function getMeeiroSelecionado() {
   return localStorage.getItem(MEEIRO_STORAGE_KEY);
-}
-
-function normalizeEmail(s) {
-  return String(s || "").trim().toLowerCase();
 }
 
 const ScreenHome = {
@@ -58,9 +59,6 @@ const ScreenHome = {
         <div id="atividade-ver-tudo" style="font-size:12px;color:var(--verde);font-weight:500;cursor:pointer;">Ver tudo</div>
       </div>
       <div id="atividade-recente-list"></div>
-
-      <h2 class="page-title" style="margin-top:22px;">Minhas Ordens</h2>
-      <div id="ordens-list">Carregando...</div>
     `;
 
     container.querySelectorAll(".acao-rapida").forEach((el) => {
@@ -72,21 +70,18 @@ const ScreenHome = {
     // se a busca dos dados da planilha falhar (ex.: arquivo movido/renomeado
     // e a referência salva neste aparelho ficou inválida), mostra o erro e
     // orienta a tocar no nome do arquivo no topo pra selecionar de novo.
-    let ordens = [], produtos = [];
+    let produtos = [];
     try {
-      ({ ordens, produtos } = await getLookupData());
+      ({ produtos } = await getLookupData());
     } catch (e) {
       console.error("Falha ao carregar dados da planilha:", e);
       container.querySelectorAll(".resumo-valor").forEach((el) => (el.textContent = "erro"));
-      container.querySelector("#atividade-recente-list").innerHTML =
-        `<div class="empty-state">Não foi possível carregar.</div>`;
-      container.querySelector("#ordens-list").innerHTML = `<div class="empty-state">
+      container.querySelector("#atividade-recente-list").innerHTML = `<div class="empty-state">
         Não foi possível carregar os dados da planilha (${escapeHtml(String(e.message || e))}).
         Verifique a conexão ou toque no nome do arquivo no topo do app pra selecionar de novo.
       </div>`;
       return;
     }
-    const meuEmail = normalizeEmail(typeof getUserEmail === "function" ? getUserEmail() : null);
 
     // Resumo rápido + atividade recente: buscados da própria planilha (Registro
     // de Inventario, ordenado pela coluna "Gravado em" — a AF), não da fila local
@@ -151,40 +146,6 @@ const ScreenHome = {
         });
       });
     })();
-
-    const minhas = ordens
-      .filter((o) => normalizeEmail(o["E-mail"]) === meuEmail && o["Situação"] !== "Executada")
-      .map((o) => ({ ...o, atrasada: isAtrasada(o["Data Prevista"]) }))
-      .sort((a, b) => (a.atrasada === b.atrasada ? 0 : a.atrasada ? -1 : 1));
-
-    const list = container.querySelector("#ordens-list");
-    if (minhas.length === 0) {
-      list.innerHTML = `<div class="empty-state">Nenhuma ordem pendente para o seu e-mail.</div>`;
-      return;
-    }
-
-    list.innerHTML = minhas
-      .map(
-        (o) => `
-      <div class="card ordem-card ${o.atrasada ? "atrasado" : ""}" data-id="${o["ID Ordem"]}">
-        <div class="ordem-card-topo">
-          <div class="ordem-card-icone">${o.atrasada ? "⚠️" : "🧪"}</div>
-          <div class="ordem-card-titulo-wrap">
-            <div class="card-title">${escapeHtml(o["Estufa"] || "")} — ${escapeHtml(o["Produto"] || "")}</div>
-            <div class="card-sub">${o.atrasada ? "⚠ Atrasada — " : ""}Prevista: ${formatExcelDate(o["Data Prevista"])}</div>
-          </div>
-        </div>
-        <div class="card-row"><span>Setor</span><span>${escapeHtml(o["Setor"] || "—")}</span></div>
-        <div class="card-row"><span>Dosagem</span><span>${escapeHtml(String(o["Dosagem Prevista"] ?? "—"))}</span></div>
-        <div class="card-row"><span>Qtde prevista</span><span>${escapeHtml(String(o["Volume/Qtde Prevista"] ?? "—"))}</span></div>
-        ${o["Instruções"] ? `<div class="card-row"><span>Instruções</span><span>${escapeHtml(o["Instruções"])}</span></div>` : ""}
-      </div>`
-      )
-      .join("");
-
-    list.querySelectorAll(".card").forEach((card) => {
-      card.addEventListener("click", () => navigate("ordem", { id: card.dataset.id }));
-    });
   },
 };
 
@@ -357,12 +318,6 @@ function formatRelativeTimeFromSerial(serial) {
   if (h < 24) return `há ${h}h`;
   const d = Math.floor(h / 24);
   return `há ${d}d`;
-}
-
-function isAtrasada(excelSerialDate) {
-  if (!excelSerialDate) return false;
-  const hoje = toExcelSerial(new Date());
-  return excelSerialDate < hoje;
 }
 
 function formatExcelDate(serial) {
