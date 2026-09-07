@@ -492,6 +492,13 @@ textarea { resize: vertical; min-height: 60px; }
 /* --- Search --- */
 .search-bar { margin-bottom: 10px; position: relative; }
 
+/* --- Filtros da Consulta de Fertirrigações (meeiro + intervalo de datas) --- */
+.ferti-filtros { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.ferti-filtros-datas { display: flex; align-items: center; gap: 8px; }
+.ferti-filtros-datas input[type="date"] { flex: 1; width: auto; min-width: 0; }
+.ferti-filtros-datas span { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.link-acao { align-self: flex-end; font-size: 12px; color: var(--verde); font-weight: 500; cursor: pointer; }
+
 /* --- Estoque: card com barra colorida à esquerda + saldo em destaque --- */
 .estoque-item {
   display: flex;

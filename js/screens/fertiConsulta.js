@@ -13,11 +13,23 @@ const ScreenFertiConsulta = {
       <div class="search-bar">
         <input type="search" id="busca-ferti" placeholder="Buscar por estufa, meeiro ou produto..." />
       </div>
+      <div class="ferti-filtros">
+        <select id="filtro-meeiro"><option value="">Todos os meeiros</option></select>
+        <div class="ferti-filtros-datas">
+          <input type="date" id="filtro-data-de" />
+          <span>até</span>
+          <input type="date" id="filtro-data-ate" />
+        </div>
+        <div id="ferti-limpar-filtros" class="link-acao">Limpar filtros</div>
+      </div>
       <div id="ferti-consulta-list">Carregando...</div>
     `;
 
     const list = container.querySelector("#ferti-consulta-list");
     const input = container.querySelector("#busca-ferti");
+    const meeiroSelect = container.querySelector("#filtro-meeiro");
+    const dataDeInput = container.querySelector("#filtro-data-de");
+    const dataAteInput = container.querySelector("#filtro-data-ate");
 
     let registros = [];
     try {
@@ -72,15 +84,35 @@ const ScreenFertiConsulta = {
         </div>`;
     };
 
-    const renderList = (termo) => {
-      const t = (termo || "").trim().toLowerCase();
-      const filtrados = !t
-        ? ordenados
-        : ordenados.filter((r) =>
-            [r["Estufa"], r["Meeiro"], r["Produto"]].some((v) => String(v || "").toLowerCase().includes(t))
-          );
+    // Lista de meeiros pra popular o filtro — só os que realmente aparecem
+    // no histórico de Ferti, em ordem alfabética.
+    const meeiros = [...new Set(ordenados.map((r) => r["Meeiro"]).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "pt-BR")
+    );
+    meeiroSelect.innerHTML =
+      `<option value="">Todos os meeiros</option>` +
+      meeiros.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+
+    // Combina busca por texto + meeiro + intervalo de datas — os três filtros
+    // funcionam juntos (ex.: meeiro X entre duas datas), não um de cada vez.
+    const renderList = () => {
+      const termo = input.value.trim().toLowerCase();
+      const meeiroFiltro = meeiroSelect.value;
+      const serialDe = dataDeInput.value ? toExcelSerial(dataDeInput.value) : null;
+      const serialAte = dataAteInput.value ? toExcelSerial(dataAteInput.value) : null;
+
+      const filtrados = ordenados.filter((r) => {
+        if (meeiroFiltro && r["Meeiro"] !== meeiroFiltro) return false;
+        const dataSerial = r["Data"] !== undefined && r["Data"] !== null && r["Data"] !== "" ? Number(r["Data"]) : null;
+        if (serialDe !== null && (dataSerial === null || dataSerial < serialDe)) return false;
+        if (serialAte !== null && (dataSerial === null || dataSerial > serialAte)) return false;
+        if (termo && ![r["Estufa"], r["Meeiro"], r["Produto"]].some((v) => String(v || "").toLowerCase().includes(termo)))
+          return false;
+        return true;
+      });
+
       if (filtrados.length === 0) {
-        list.innerHTML = `<div class="empty-state">Nenhuma fertirrigação encontrada.</div>`;
+        list.innerHTML = `<div class="empty-state">Nenhuma fertirrigação encontrada com esse filtro.</div>`;
         return;
       }
       list.innerHTML = filtrados.slice(0, 100).map(cardHtml).join("");
@@ -92,7 +124,17 @@ const ScreenFertiConsulta = {
       });
     };
 
-    input.addEventListener("input", () => renderList(input.value));
+    [input, meeiroSelect, dataDeInput, dataAteInput].forEach((el) => {
+      el.addEventListener("input", renderList);
+      el.addEventListener("change", renderList);
+    });
+    container.querySelector("#ferti-limpar-filtros").addEventListener("click", () => {
+      input.value = "";
+      meeiroSelect.value = "";
+      dataDeInput.value = "";
+      dataAteInput.value = "";
+      renderList();
+    });
     renderList();
   },
 };
