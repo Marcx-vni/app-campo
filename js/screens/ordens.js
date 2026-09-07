@@ -68,7 +68,24 @@ const ScreenOrdens = {
     });
     container.querySelector("#atividade-ver-tudo").addEventListener("click", () => navigate("fila"));
 
-    const { ordens, produtos } = await getLookupData();
+    // Nunca deixa a tela travada em "Carregando..." pra sempre sem explicação:
+    // se a busca dos dados da planilha falhar (ex.: arquivo movido/renomeado
+    // e a referência salva neste aparelho ficou inválida), mostra o erro e
+    // orienta a tocar no nome do arquivo no topo pra selecionar de novo.
+    let ordens = [], produtos = [];
+    try {
+      ({ ordens, produtos } = await getLookupData());
+    } catch (e) {
+      console.error("Falha ao carregar dados da planilha:", e);
+      container.querySelectorAll(".resumo-valor").forEach((el) => (el.textContent = "erro"));
+      container.querySelector("#atividade-recente-list").innerHTML =
+        `<div class="empty-state">Não foi possível carregar.</div>`;
+      container.querySelector("#ordens-list").innerHTML = `<div class="empty-state">
+        Não foi possível carregar os dados da planilha (${escapeHtml(String(e.message || e))}).
+        Verifique a conexão ou toque no nome do arquivo no topo do app pra selecionar de novo.
+      </div>`;
+      return;
+    }
     const meuEmail = normalizeEmail(typeof getUserEmail === "function" ? getUserEmail() : null);
 
     // Resumo rápido + atividade recente: buscados da própria planilha (Registro

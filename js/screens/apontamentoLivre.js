@@ -5,11 +5,17 @@
 // ============================================================================
 
 const BLOCO_SUBTITULOS = {
-  Uso: "Registre uma aplicação de produto",
+  Uso: "Registre uma aplicação de produto/insumo",
   Ferti: "Registre uma fertirrigação",
   Venda: "Registre uma venda",
   Compra: "Registre uma entrada de fornecedor",
 };
+
+// "Uso" é o nome da coluna na planilha (não muda — é a chave de dados usada
+// em toda a validação/gravação), mas na tela é mais intuitivo chamar de
+// "Aplicação", que é o que a pessoa de campo realmente está fazendo.
+const BLOCO_LABELS = { Uso: "Aplicação", Ferti: "Fertirrigação", Venda: "Venda", Compra: "Compra" };
+const BLOCO_ICONES = { Uso: "🧪", Ferti: "💧", Venda: "💰", Compra: "🛒" };
 
 const ScreenApontamentoLivre = {
   bloco: "Uso",
@@ -21,7 +27,10 @@ const ScreenApontamentoLivre = {
       <p class="page-subtitle">${BLOCO_SUBTITULOS[this.bloco]}</p>
       <div class="bloco-tabs">
         ${["Uso", "Ferti", "Venda", "Compra"]
-          .map((b) => `<div class="bloco-tab ${b === this.bloco ? "active" : ""}" data-bloco="${b}">${b}</div>`)
+          .map(
+            (b) =>
+              `<div class="bloco-tab ${b === this.bloco ? "active" : ""}" data-bloco="${b}">${BLOCO_ICONES[b]} ${BLOCO_LABELS[b]}</div>`
+          )
           .join("")}
       </div>
       <form id="form-apontamento"></form>
@@ -43,10 +52,15 @@ const ScreenApontamentoLivre = {
     // Na Venda, a lista de produtos vem da aba "Cadastro de Venda" (coluna "Tipo"),
     // não do cadastro geral de produtos usado em Uso/Ferti/Compra. A Tabela613
     // tem ~400 itens — vira uma caixa de busca em vez de <select> gigante.
+    // Em Aplicação (Uso), só entra produto com saldo em estoque — não faz
+    // sentido nem deixar escolher algo zerado (a validação já bloqueia o
+    // envio, mas nem aparecer na busca evita a pessoa perder tempo tentando).
     const produtoOpcoes =
       this.bloco === "Venda"
         ? (lookups.produtosVenda || []).filter((p) => p["Tipo"]).map((p) => ({ value: p["Tipo"], label: p["Tipo"] }))
-        : lookups.produtos.filter((p) => p["Produto"]).map((p) => ({ value: p["Produto"], label: p["Produto"] }));
+        : lookups.produtos
+            .filter((p) => p["Produto"] && (this.bloco !== "Uso" || Number(p["Estoque"]) > 0))
+            .map((p) => ({ value: p["Produto"], label: p["Produto"] }));
 
     // Estufa/Meeiro/Fornecedor: caixa de busca (mesmo padrão do Produto), não
     // lista de cards — mais rápido de usar quando a lista cresce. A Estufa só
