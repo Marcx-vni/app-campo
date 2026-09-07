@@ -54,13 +54,15 @@ const ScreenFertiConsulta = {
       );
 
     const cardHtml = (r) => {
+      // Arredondado pra grama inteira (a pedido do usuário) — inclusive pra
+      // lançamentos antigos que ainda tenham decimal gravado na planilha.
+      // O total é recalculado a partir dos setores já arredondados, em vez
+      // de usar a coluna "Total" da planilha, pra sempre bater com a soma
+      // do que está mostrado no card.
       const setores = [1, 2, 3, 4, 5, 6]
-        .map((n) => ({ n, v: Number(r[`Setor ${n}`]) || 0 }))
+        .map((n) => ({ n, v: Math.round(Number(r[`Setor ${n}`]) || 0) }))
         .filter((s) => s.v > 0);
-      const total =
-        r["Total"] !== undefined && r["Total"] !== null && r["Total"] !== ""
-          ? Number(r["Total"])
-          : setores.reduce((soma, s) => soma + s.v, 0);
+      const total = setores.reduce((soma, s) => soma + s.v, 0);
       const temDat = r["D.A.T"] !== undefined && r["D.A.T"] !== null && r["D.A.T"] !== "";
       return `
         <div class="card card-ferti">

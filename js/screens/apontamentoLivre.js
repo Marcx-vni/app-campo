@@ -207,13 +207,17 @@ const ScreenApontamentoLivre = {
         return;
       }
       const dosagem = Number(form.querySelector("#f-dosagem-ferti")?.value) || 0;
+      // Arredondado pra grama inteira aqui também, pra bater com o que
+      // calcularSetoresFerti vai gravar de fato — senão a prévia mostraria
+      // um número e a planilha gravaria outro.
+      const qtds = setores.map((s) => Math.round((s.plantas / 1000) * dosagem));
       const linhas = setores
-        .map((s) => {
-          const qtd = (s.plantas / 1000) * dosagem;
-          return `<div class="card-row"><span>Setor ${s.setor} · ${formatNumero(s.plantas)} plantas</span><span>${dosagem > 0 ? formatNumero(qtd) : "—"}</span></div>`;
-        })
+        .map(
+          (s, i) =>
+            `<div class="card-row"><span>Setor ${s.setor} · ${formatNumero(s.plantas)} plantas</span><span>${dosagem > 0 ? formatNumero(qtds[i]) : "—"}</span></div>`
+        )
         .join("");
-      const total = setores.reduce((soma, s) => soma + (s.plantas / 1000) * dosagem, 0);
+      const total = qtds.reduce((soma, q) => soma + q, 0);
       calcEl.innerHTML = `
         ${linhas}
         <div class="card-row ferti-total-row"><span>Total</span><span>${dosagem > 0 ? `${formatNumero(total)} (${formatNumero(total / 1000)} no estoque)` : "—"}</span></div>
