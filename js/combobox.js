@@ -31,52 +31,99 @@ function criarComboBusca(container, opcoes, { valorInicial = "", placeholder = "
   const inputValor = container.querySelector(`#${idBase}-valor`);
   const lista = container.querySelector(`#${idBase}-lista`);
 
+  let limitadasAtuais = [];
+  let destacado = -1; // índice em limitadasAtuais navegado pelas setas do teclado
+
   function renderLista(termo) {
     const termoNorm = _comboNormalizar(termo);
     const filtradas = termoNorm
       ? opcoes.filter((o) => _comboNormalizar(o.label).includes(termoNorm))
       : opcoes;
-    const limitadas = filtradas.slice(0, 60); // não trava a tela com listas gigantes
+    limitadasAtuais = filtradas.slice(0, 60); // não trava a tela com listas gigantes
+    destacado = limitadasAtuais.length ? 0 : -1;
 
-    if (limitadas.length === 0) {
-      lista.innerHTML = `<div class="combo-item combo-vazio">Nenhum resultado</div>`;
-    } else {
-      lista.innerHTML = limitadas
-        .map(
-          (o, i) =>
-            `<div class="combo-item" data-index="${i}" data-value="${escapeHtml(String(o.value))}">${escapeHtml(o.label)}</div>`
-        )
-        .join("");
-      lista.querySelectorAll(".combo-item").forEach((el) => {
-        el.addEventListener("mousedown", (ev) => {
-          // mousedown (não click) pra disparar antes do blur do input fechar a lista
-          ev.preventDefault();
-          const opcao = limitadas[Number(el.dataset.index)];
-          selecionar(opcao);
-        });
-      });
-    }
+    desenharLista();
     lista.hidden = false;
+    document.addEventListener("pointerdown", aoTocarFora, true);
+    document.addEventListener("touchstart", aoTocarFora, true);
+  }
+
+  function desenharLista() {
+    if (limitadasAtuais.length === 0) {
+      lista.innerHTML = `<div class="combo-item combo-vazio">Nenhum resultado</div>`;
+      return;
+    }
+    lista.innerHTML = limitadasAtuais
+      .map(
+        (o, i) =>
+          `<div class="combo-item${i === destacado ? " combo-item-destacado" : ""}" data-index="${i}">${escapeHtml(o.label)}</div>`
+      )
+      .join("");
+    lista.querySelectorAll(".combo-item").forEach((el) => {
+      // "click" (não mousedown) — em celular, mousedown pode perder a corrida
+      // contra o blur do input e a seleção nunca acontece. Fechar a lista é
+      // feito por um listener global de toque/clique "fora", não pelo blur,
+      // então o click no item chega normalmente antes de qualquer coisa fechar.
+      el.addEventListener("click", () => {
+        selecionar(limitadasAtuais[Number(el.dataset.index)]);
+      });
+    });
+  }
+
+  function moverDestaque(passo) {
+    if (lista.hidden) {
+      renderLista(inputTexto.value === selecionarLabelAtual() ? "" : inputTexto.value);
+      return;
+    }
+    if (!limitadasAtuais.length) return;
+    destacado = (destacado + passo + limitadasAtuais.length) % limitadasAtuais.length;
+    desenharLista();
+    const elDestacado = lista.querySelector(".combo-item-destacado");
+    if (elDestacado) elDestacado.scrollIntoView({ block: "nearest" });
+  }
+
+  function fecharLista() {
+    lista.hidden = true;
+    document.removeEventListener("pointerdown", aoTocarFora, true);
+    document.removeEventListener("touchstart", aoTocarFora, true);
+  }
+
+  function aoTocarFora(ev) {
+    if (container.contains(ev.target)) return;
+    fecharLista();
+    // se o texto digitado não corresponde a nenhuma seleção válida, limpa o campo
+    if (!inputValor.value) inputTexto.value = "";
   }
 
   function selecionar(opcao) {
     inputValor.value = opcao.value;
     inputTexto.value = opcao.label;
-    lista.hidden = true;
+    fecharLista();
   }
 
-  inputTexto.addEventListener("focus", () => renderLista(inputTexto.value === selecionarLabelAtual() ? "" : inputTexto.value));
+  inputTexto.addEventListener("focus", () => {
+    renderLista(inputTexto.value === selecionarLabelAtual() ? "" : inputTexto.value);
+  });
   inputTexto.addEventListener("input", () => {
     // digitar de novo invalida a seleção anterior até escolher algo da lista de novo
     inputValor.value = "";
     renderLista(inputTexto.value);
   });
-  inputTexto.addEventListener("blur", () => {
-    setTimeout(() => {
-      lista.hidden = true;
-      // se o texto digitado não corresponde a nenhuma seleção válida, limpa o campo
-      if (!inputValor.value) inputTexto.value = "";
-    }, 150);
+  inputTexto.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      moverDestaque(1);
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      moverDestaque(-1);
+    } else if (ev.key === "Enter") {
+      if (!lista.hidden && destacado >= 0 && limitadasAtuais[destacado]) {
+        ev.preventDefault();
+        selecionar(limitadasAtuais[destacado]);
+      }
+    } else if (ev.key === "Escape") {
+      fecharLista();
+    }
   });
 
   function selecionarLabelAtual() {
