@@ -233,19 +233,17 @@ function montarTextoWhatsAppFerti(fertiRow) {
     .map((n) => ({ n, v: Number(fertiRow[`Setor ${n}`]) || 0 }))
     .filter((s) => s.v > 0);
   const total = setores.reduce((soma, s) => soma + s.v, 0);
-  const linhasSetor = setores.map((s) => `Setor ${s.n}: ${formatNumero(s.v)}`).join("\n");
-  const dat =
-    fertiRow["D.A.T"] !== undefined && fertiRow["D.A.T"] !== null && fertiRow["D.A.T"] !== ""
-      ? `\n⏱ D.A.T: ${fertiRow["D.A.T"]} dias`
-      : "";
+  // Dosagem e D.A.T ficaram de fora do texto a pedido do usuário — são
+  // informação de controle interno, e misturadas ao recado do meeiro só
+  // confundiam (ele só precisa saber quanto pesar em cada setor).
+  const linhasSetor = setores.map((s) => `Setor ${s.n}- ${formatNumero(s.v)} gramas`).join("\n");
   return (
     `🧪 *Fertirrigação — ${fertiRow["Estufa"] || "—"}*\n` +
     `📅 ${formatExcelDate(fertiRow["Data"])}\n` +
     `👤 Meeiro: ${fertiRow["Meeiro"] || "—"}\n` +
-    `🌱 Produto: ${fertiRow["Produto"] || "—"}\n` +
-    `💧 Dosagem: ${formatNumero(fertiRow["Dosagem"])} (g/mL) por 1.000 plantas${dat}\n\n` +
+    `🌱 Produto: ${fertiRow["Produto"] || "—"}\n\n` +
     `${linhasSetor}\n\n` +
-    `*Total: ${formatNumero(total)} (${formatNumero(total / 1000)} no estoque)*`
+    `*Total todos os setores - ${formatNumero(total)} gramas*`
   );
 }
 
