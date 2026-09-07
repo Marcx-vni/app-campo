@@ -2,6 +2,9 @@
 // SELEÇÃO DE ARQUIVO — mostrada uma vez (por aparelho) após o login, para
 // escolher qual arquivo do OneDrive o app vai usar, sem precisar descobrir
 // nenhum "Item ID" manualmente. A escolha fica salva em localStorage.
+// Na abertura normal (caminho conhecido funciona de primeira, quase sempre),
+// isso é só uma tela de boas-vindas com "sincronizando" — não pede nada do
+// usuário. Só vira um formulário de busca se o caminho automático falhar.
 // ============================================================================
 
 // Caminho exato conhecido do arquivo (mais confiável que a busca por nome,
@@ -11,19 +14,19 @@ const CAMINHO_CONHECIDO = "Documentos/Planilhas Sitio/Controle Sitio EPI 2026.xl
 
 const ScreenFileSelector = {
   async render(container, onSelected) {
+    const primeiroNome = (getUserDisplayName() || "").split(" ")[0] || "";
+
     container.innerHTML = `
-      <div class="login-box" style="margin: 40px auto; max-width: 420px;">
-        <h1 style="font-size:18px;">Escolha o arquivo</h1>
-        <p class="muted">Selecione a planilha Controle Sitio EPI 2026 no seu OneDrive.</p>
-        <p id="status-caminho" class="muted">Procurando o arquivo automaticamente...</p>
-        <input type="search" id="busca-arquivo" placeholder="Buscar por nome (ex: Controle Sitio)" value="Controle Sitio EPI" style="margin-bottom:10px; display:none;" />
-        <button id="btn-buscar-arquivo" class="btn btn-primary btn-block" style="display:none;">Buscar</button>
-        <div id="resultado-arquivos" style="margin-top:16px; text-align:left;"></div>
-        <p id="erro-arquivo" class="error-text"></p>
+      <div class="welcome-box">
+        <div class="welcome-spinner"></div>
+        <h1>Bem-vindo${primeiroNome ? ", " + escapeHtml(primeiroNome) : ""}!</h1>
+        <p class="muted">Sincronizando dados da planilha...</p>
       </div>
     `;
 
     // Tenta primeiro pelo caminho exato conhecido — evita depender da busca.
+    // Na grande maioria das vezes o usuário só vê a mensagem de boas-vindas
+    // acima, por uma fração de segundo, e cai direto no app.
     try {
       const arquivo = await getFileByPath(CAMINHO_CONHECIDO);
       const driveId = arquivo.parentReference.driveId;
@@ -32,11 +35,18 @@ const ScreenFileSelector = {
       return;
     } catch (e) {
       // Não achou nesse caminho — cai para a busca manual normal.
-      container.querySelector("#status-caminho").textContent =
-        "Não encontrei automaticamente. Busque pelo nome abaixo:";
-      container.querySelector("#busca-arquivo").style.display = "";
-      container.querySelector("#btn-buscar-arquivo").style.display = "";
     }
+
+    container.innerHTML = `
+      <div class="login-box" style="margin: 40px auto; max-width: 420px;">
+        <h1 style="font-size:18px;">Escolha o arquivo</h1>
+        <p class="muted">Não encontrei a planilha automaticamente. Busque pelo nome abaixo:</p>
+        <input type="search" id="busca-arquivo" placeholder="Buscar por nome (ex: Controle Sitio)" value="Controle Sitio EPI" style="margin-bottom:10px;" />
+        <button id="btn-buscar-arquivo" class="btn btn-primary btn-block">Buscar</button>
+        <div id="resultado-arquivos" style="margin-top:16px; text-align:left;"></div>
+        <p id="erro-arquivo" class="error-text"></p>
+      </div>
+    `;
 
     const buscar = async () => {
       const termo = container.querySelector("#busca-arquivo").value;

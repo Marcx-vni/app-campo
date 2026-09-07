@@ -53,12 +53,14 @@ const ScreenApontamentoLivre = {
     // lista as que têm plantio Ativo agora (as sem plantio não servem pra
     // lançamento mesmo, então nem aparecem pra escolher por engano); o nome do
     // plantio aparece junto no rótulo pra confirmar de relance.
+    // O emoji da categoria fica no <label> do campo (não dentro da caixa) pra
+    // não disputar espaço com o ícone de lupa da busca.
     const estufaOpcoes = lookups.estufas
       .map((e) => ({ __cod: e.__cod, nome: e["Estufa"], plantios: plantiosAtivos(lookups, e["Estufa"]) }))
       .filter((e) => e.plantios.length > 0)
-      .map((e) => ({ value: e.__cod, label: `🌿 ${e.nome} — ${e.plantios.join(", ")}` }));
-    const meeiroOpcoes = lookups.meeiros.map((m) => ({ value: m.__cod, label: `👤 ${m["Meeiro"]}` }));
-    const fornecedorOpcoes = lookups.fornecedores.map((f) => ({ value: f["Fornecedor"], label: `🏭 ${f["Fornecedor"]}` }));
+      .map((e) => ({ value: e.__cod, label: `${e.nome} — ${e.plantios.join(", ")}` }));
+    const meeiroOpcoes = lookups.meeiros.map((m) => ({ value: m.__cod, label: m["Meeiro"] }));
+    const fornecedorOpcoes = lookups.fornecedores.map((f) => ({ value: f["Fornecedor"], label: f["Fornecedor"] }));
 
     const clienteOptions = (lookups.clientes || [])
       .map((c) => `<option value="${escapeHtml(c["Cliente"])}">${escapeHtml(c["Cliente"])}</option>`)
@@ -108,7 +110,7 @@ const ScreenApontamentoLivre = {
         <input type="number" step="0.01" id="f-quantidade" required />
         <label>Valor unitário</label>
         <input type="number" step="0.01" id="f-valor-unitario" required />
-        <label>Fornecedor</label>
+        <label>🏭 Fornecedor</label>
         <div id="f-fornecedor-combo"></div>
         <label>Data de vencimento (opcional)</label>
         <input type="date" id="f-vencimento" />
@@ -121,9 +123,9 @@ const ScreenApontamentoLivre = {
       <label>Data</label>
       <input type="date" id="f-data" value="${today}" required />
 
-      ${this.bloco !== "Compra" ? `<label>Meeiro</label><div id="f-meeiro-combo"></div>` : ""}
+      ${this.bloco !== "Compra" ? `<label>👤 Meeiro</label><div id="f-meeiro-combo"></div>` : ""}
 
-      ${this.bloco !== "Compra" ? `<label>Estufa</label><div id="f-estufa-combo"></div>` : ""}
+      ${this.bloco !== "Compra" ? `<label>🌿 Estufa</label><div id="f-estufa-combo"></div>` : ""}
 
       <label>Produto</label>
       <div id="f-produto-combo"></div>

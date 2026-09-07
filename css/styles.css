@@ -53,6 +53,27 @@ html, body {
 .muted { color: var(--muted); font-size: 14px; margin-top: 0; }
 .error-text { color: var(--red); font-size: 13px; min-height: 18px; }
 
+/* --- Boas-vindas / sincronizando (tela entre login e app, na abertura) --- */
+#main-content .welcome-box,
+.welcome-box {
+  margin: 22vh auto 0;
+  max-width: 320px;
+  text-align: center;
+  padding: 0 24px;
+}
+.welcome-box h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin: 4px 0 6px; color: var(--text); }
+.welcome-box .muted { font-size: 14px; }
+.welcome-spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--verde);
+  animation: welcome-spin 0.8s linear infinite;
+}
+@keyframes welcome-spin { to { transform: rotate(360deg); } }
+
 /* --- Layout --- */
 #app-shell { display: flex; flex-direction: column; height: 100vh; }
 .topbar {
