@@ -108,8 +108,20 @@ const ScreenEstoque = {
       renderBusca(termo);
     };
 
-    input.addEventListener("input", () => renderList(input.value));
-    renderList();
+    // Nunca deixa a tela em branco sem explicação: se algo inesperado quebrar
+    // o agrupamento, mostra o erro em vez de ficar tudo vazio (ajuda a
+    // diagnosticar por print, sem precisar abrir o console do navegador).
+    const renderListSeguro = (filtro) => {
+      try {
+        renderList(filtro);
+      } catch (e) {
+        console.error("Erro ao montar lista de estoque:", e);
+        list.innerHTML = `<div class="empty-state">Não foi possível montar a lista de estoque (${escapeHtml(String(e.message || e))}). Puxe pra atualizar ou tente de novo.</div>`;
+      }
+    };
+
+    input.addEventListener("input", () => renderListSeguro(input.value));
+    renderListSeguro();
   },
 };
 

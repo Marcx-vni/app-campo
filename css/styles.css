@@ -92,6 +92,11 @@ html, body {
   margin-top: 2px;
   cursor: pointer;
 }
+.app-version {
+  font-size: 10px;
+  color: rgba(255,255,255,0.45);
+  margin-left: 6px;
+}
 .icon-btn {
   background: none; border: none; color: white; font-size: 20px; cursor: pointer;
 }

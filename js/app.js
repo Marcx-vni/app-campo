@@ -85,6 +85,9 @@ async function bootApp() {
     console.warn("Falha ao carregar listas (seguindo com cache local, se houver):", e);
   }
 
+  const versaoEl = document.getElementById("app-version");
+  if (versaoEl) versaoEl.textContent = APP_VERSION;
+
   await updateSyncIndicator();
   renderRoute();
 

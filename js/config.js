@@ -25,6 +25,13 @@ const APP_CONFIG = {
   scopes: ["Files.ReadWrite", "User.Read"],
 };
 
+// Número de versão exibido em letras miúdas no cabeçalho do app — só pra dar
+// pra conferir visualmente (numa captura de tela, por exemplo) se o celular
+// já está rodando o código mais novo depois de um deploy, sem precisar abrir
+// o console. Sempre que mudar algo, atualize aqui E o CACHE_NAME em
+// service-worker.js (os dois números não precisam ser o mesmo, só sempre subir).
+const APP_VERSION = "v19";
+
 // Nomes das Tabelas do Excel (definidos na planilha — não altere a menos que renomeie as tabelas lá)
 const TABLES = {
   // O app grava DIRETO nas tabelas finais — sem passar pela aba "Apontamentos"
