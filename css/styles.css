@@ -13,6 +13,9 @@
   --sucesso: #7CC576;
   --red: #C9603D;
   --amber: #B5792E;
+  --ferti: #5B4B8A;
+  --ferti-bg: #E7E2F4;
+  --whatsapp: #25D366;
   --radius: 12px;
 
   /* aliases usados por telas mais antigas — mantém a mesma paleta nova */
@@ -243,6 +246,36 @@ html, body {
 .atividade-icone-verde { background: #D6E8D6; }
 .atividade-icone-azul { background: #DCE6F5; }
 .atividade-icone-terracota { background: #F5E4DD; }
+.atividade-icone-ferti { background: var(--ferti-bg); }
+
+/* --- Card de Fertirrigação (Atividade recente e Consulta de Fertirrigações) --- */
+.card-ferti { border-left: 3px solid var(--ferti); }
+.tag-ferti {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ferti);
+  background: var(--ferti-bg);
+  padding: 2px 7px;
+  border-radius: 20px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.btn-compartilhar {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 0;
+  border: 1px solid var(--whatsapp);
+  border-radius: 10px;
+  background: #E9F9EE;
+  color: #128C41;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-compartilhar:active { background: #D9F2E2; }
 
 /* --- Card de ordem com ícone (Minhas Ordens) --- */
 .ordem-card-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }

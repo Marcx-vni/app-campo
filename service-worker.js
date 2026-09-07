@@ -10,7 +10,7 @@
 // uma versão nova do Service Worker e buscar tudo de novo — se só os outros
 // arquivos (js/*.js) mudarem e este número não mudar, o navegador pode
 // continuar servindo os arquivos antigos do cache indefinidamente.
-const CACHE_NAME = "app-campo-shell-v30";
+const CACHE_NAME = "app-campo-shell-v31";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -26,7 +26,8 @@ const SHELL_FILES = [
   "./js/combobox.js",
   "./js/app.js",
   "./js/screens/fileSelector.js",
-  "./js/screens/ordens.js",
+  "./js/screens/home.js",
+  "./js/screens/fertiConsulta.js",
   "./js/screens/ordemCard.js",
   "./js/screens/apontamentoLivre.js",
   "./js/screens/estoque.js",

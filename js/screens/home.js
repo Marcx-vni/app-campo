@@ -1,10 +1,10 @@
 // ============================================================================
-// T1 — MINHAS ORDENS
-// Lista de cards filtrada pelo e-mail de quem logou (coluna "E-mail" da
-// tabela Ordens) e Situação <> Executada. Sem nenhuma seleção manual —
-// cada pessoa só vê as ordens atribuídas ao e-mail com que ela entrou.
-// Atrasadas (Data Prevista < hoje) aparecem primeiro, em vermelho.
-// No topo, um resumo rápido do dia + atalhos pras telas mais usadas.
+// TELA INICIAL (Início) — resumo rápido do dia, atalhos, atividade recente
+// (das últimas gravações na planilha) e "Minhas Ordens" (T1: lista de cards
+// filtrada pelo e-mail de quem logou, coluna "E-mail" da tabela Ordens, com
+// Situação <> Executada — atrasadas, Data Prevista < hoje, aparecem primeiro).
+// Antes esse conteúdo todo vivia na aba "Ordens" da navegação; agora tem tela
+// própria porque a aba "Ordens" passou a ser a Consulta de Fertirrigações.
 // ============================================================================
 
 // Lembrete do último Meeiro escolhido no formulário de Apontamento Livre
@@ -19,7 +19,7 @@ function normalizeEmail(s) {
   return String(s || "").trim().toLowerCase();
 }
 
-const ScreenOrdens = {
+const ScreenHome = {
   async render(container) {
     container.innerHTML = `
       <div class="resumo-rapido" id="resumo-rapido">
@@ -98,11 +98,24 @@ const ScreenOrdens = {
       container.querySelector("#resumo-fila").textContent = pendentes.length;
 
       let registro = [];
+      let registroFerti = [];
       try {
-        registro = await readTable(TABLES.registroInventario);
+        [registro, registroFerti] = await Promise.all([
+          readTable(TABLES.registroInventario),
+          readTable(TABLES.registroFerti).catch(() => []),
+        ]);
       } catch (e) {
         console.warn("Falha ao buscar Registro de Inventario pra Atividade recente:", e);
       }
+      // A Fertirrigação grava em "Tipo Movimentação" = S, igual à Aplicação
+      // (Uso) — a coluna "Operação" vem igual pros dois ("Saída Consumo"),
+      // então pra dar cor/rótulo diferente na Fertirrigação cruzamos com a
+      // aba "Registro Ferti" pelos mesmos dados (Estufa+Produto+Data+Meeiro).
+      const fertiIndex = new Map();
+      registroFerti.forEach((f) => {
+        fertiIndex.set(chaveFerti(f["Estufa"], f["Produto"], f["Data"], f["Meeiro"]), f);
+      });
+
       const comData = registro
         .filter((r) => r["Gravado em"])
         .sort((a, b) => Number(b["Gravado em"]) - Number(a["Gravado em"]));
@@ -130,7 +143,13 @@ const ScreenOrdens = {
         atividadeList.innerHTML = `<div class="empty-state">Nenhum apontamento lançado ainda.</div>`;
         return;
       }
-      atividadeList.innerHTML = recentes.map((row) => atividadeCardHtml(row, produtos)).join("");
+      atividadeList.innerHTML = recentes.map((row) => atividadeCardHtml(row, produtos, fertiIndex)).join("");
+      atividadeList.querySelectorAll(".btn-compartilhar").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const fertiRow = fertiIndex.get(btn.dataset.fertiKey);
+          if (fertiRow) compartilharTexto(montarTextoWhatsAppFerti(fertiRow));
+        });
+      });
     })();
 
     const minhas = ordens
@@ -199,18 +218,77 @@ function unidadeValida(u) {
   return s;
 }
 
+// Chave usada pra cruzar uma linha do Registro de Inventario com sua linha
+// correspondente no Registro Ferti (nenhuma das duas tabelas guarda uma
+// referência direta uma pra outra, então a única forma de casar as duas é
+// pelos dados que as duas têm em comum: mesma Estufa+Produto+Data+Meeiro).
+function chaveFerti(estufa, produto, dataSerial, meeiro) {
+  return [estufa, produto, dataSerial, meeiro].map((v) => String(v ?? "").trim().toLowerCase()).join("||");
+}
+
+// Texto pronto pra compartilhar por WhatsApp — um "relatório de campo" com
+// as quantidades por setor, pra mandar direto pro meeiro que vai aplicar.
+function montarTextoWhatsAppFerti(fertiRow) {
+  const setores = [1, 2, 3, 4, 5, 6]
+    .map((n) => ({ n, v: Number(fertiRow[`Setor ${n}`]) || 0 }))
+    .filter((s) => s.v > 0);
+  const total = setores.reduce((soma, s) => soma + s.v, 0);
+  const linhasSetor = setores.map((s) => `Setor ${s.n}: ${formatNumero(s.v)}`).join("\n");
+  const dat =
+    fertiRow["D.A.T"] !== undefined && fertiRow["D.A.T"] !== null && fertiRow["D.A.T"] !== ""
+      ? `\n⏱ D.A.T: ${fertiRow["D.A.T"]} dias`
+      : "";
+  return (
+    `🧪 *Fertirrigação — ${fertiRow["Estufa"] || "—"}*\n` +
+    `📅 ${formatExcelDate(fertiRow["Data"])}\n` +
+    `👤 Meeiro: ${fertiRow["Meeiro"] || "—"}\n` +
+    `🌱 Produto: ${fertiRow["Produto"] || "—"}\n` +
+    `💧 Dosagem: ${formatNumero(fertiRow["Dosagem"])} (g/mL) por 1.000 plantas${dat}\n\n` +
+    `${linhasSetor}\n\n` +
+    `*Total: ${formatNumero(total)} (${formatNumero(total / 1000)} no estoque)*`
+  );
+}
+
 // Card de "Atividade recente" a partir de uma linha real do Registro de
 // Inventario (não da fila local) — reflete o que foi gravado por qualquer
 // aparelho, ordenado pela coluna "Gravado em" (AF).
 // `produtos` (Tabela613) é usado só pra achar a unidade (kg/L/un) do produto
-// consumido, nas linhas de uso (S).
-function atividadeCardHtml(row, produtos) {
+// consumido, nas linhas de uso (S). `fertiIndex` (Estufa+Produto+Data+Meeiro
+// -> linha do Registro Ferti) é usado só pra diferenciar Fertirrigação de
+// Aplicação normal, já que as duas gravam "Tipo Movimentação" = S igual.
+function atividadeCardHtml(row, produtos, fertiIndex) {
   const tipo = row["Tipo Movimentação"];
-  const info = TIPO_MOVIMENTACAO_INFO[tipo] || { icone: "📋", cor: "atividade-icone-verde" };
   const isCompra = tipo === "E";
   const produtoNome = row["Descricao"] || "—";
-  const complemento = isCompra ? produtoNome : row["Estufa"] || "";
   const pessoa = isCompra ? row["Fornecedor"] || "" : row["Meeiro"] || "";
+
+  const fertiRow =
+    tipo === "S" && fertiIndex
+      ? fertiIndex.get(chaveFerti(row["Estufa"], produtoNome, row["Data"], row["Meeiro"]))
+      : null;
+
+  if (fertiRow) {
+    const setores = [1, 2, 3, 4, 5, 6].map((n) => Number(fertiRow[`Setor ${n}`]) || 0).filter((v) => v > 0);
+    const total = setores.reduce((a, b) => a + b, 0);
+    return `
+      <div class="card card-ferti">
+        <div class="atividade-card-topo">
+          <div class="atividade-icone atividade-icone-ferti">💧</div>
+          <div style="flex:1; min-width:0;">
+            <div class="card-title">Fertirrigação — ${escapeHtml(row["Estufa"] || "")} <span class="tag-ferti">FERTI</span></div>
+            <div class="card-sub">${[pessoa, formatRelativeTimeFromSerial(row["Gravado em"])].filter(Boolean).join(" · ")}</div>
+          </div>
+        </div>
+        <div class="card-row"><span>Produto</span><span>${escapeHtml(produtoNome)}</span></div>
+        <div class="card-row"><span>Dosagem</span><span>${formatNumero(fertiRow["Dosagem"])} /1.000 plantas</span></div>
+        <div class="card-row"><span>Setores aplicados</span><span>${setores.length}</span></div>
+        <div class="card-row ferti-total-row"><span>Total</span><span>${formatNumero(total)} (${formatNumero(total / 1000)} no estoque)</span></div>
+        <button type="button" class="btn-compartilhar" data-ferti-key="${escapeHtml(chaveFerti(row["Estufa"], produtoNome, row["Data"], row["Meeiro"]))}">📲 Enviar por WhatsApp</button>
+      </div>`;
+  }
+
+  const info = TIPO_MOVIMENTACAO_INFO[tipo] || { icone: "📋", cor: "atividade-icone-verde" };
+  const complemento = isCompra ? produtoNome : row["Estufa"] || "";
 
   // Linhas extras de detalhe, além de Produto: variam por tipo de movimentação.
   const linhasExtra = [];

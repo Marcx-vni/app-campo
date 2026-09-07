@@ -4,7 +4,8 @@
 // ============================================================================
 
 const routes = {
-  ordens: (el) => ScreenOrdens.render(el),
+  home: (el) => ScreenHome.render(el),
+  ferti: (el) => ScreenFertiConsulta.render(el),
   ordem: (el, params) => ScreenOrdemCard.render(el, params.id),
   apontamento: (el) => ScreenApontamentoLivre.render(el),
   estoque: (el) => ScreenEstoque.render(el),
@@ -16,15 +17,33 @@ function navigate(route, params = {}) {
 }
 
 function renderRoute() {
-  const hash = location.hash.replace("#", "") || "ordens";
+  const hash = location.hash.replace("#", "") || "home";
   const [route, id] = hash.split("/");
-  const fn = routes[route] || routes.ordens;
+  const fn = routes[route] || routes.home;
   document.querySelectorAll(".nav-btn").forEach((b) =>
     b.classList.toggle("active", b.dataset.route === route)
   );
   const main = document.getElementById("main-content");
   main.innerHTML = "";
   fn(main, { id });
+}
+
+// Compartilha um texto (relatório de Fertirrigação, por ex.) usando o menu
+// nativo de compartilhamento do aparelho quando disponível — assim a pessoa
+// escolhe o contato/grupo do WhatsApp na hora, sem precisar informar telefone
+// nenhum no app. Sem suporte (a maioria dos navegadores desktop), cai pro
+// link "wa.me" (abre o WhatsApp Web/app já com o texto pronto pra colar).
+async function compartilharTexto(texto) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ text: texto });
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // pessoa cancelou o compartilhamento
+      // qualquer outro erro cai no fallback abaixo
+    }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
 }
 
 function showToast(message, ms = 2800) {

@@ -13,7 +13,7 @@ const ScreenOrdemCard = {
     const el = container.querySelector("#ordem-detail");
 
     if (!ordem) {
-      el.innerHTML = `<div class="empty-state">Ordem não encontrada (pode já ter sido sincronizada). <br><button class="btn btn-secondary btn-block" onclick="navigate('ordens')">Voltar</button></div>`;
+      el.innerHTML = `<div class="empty-state">Ordem não encontrada (pode já ter sido sincronizada). <br><button class="btn btn-secondary btn-block" onclick="navigate('home')">Voltar</button></div>`;
       return;
     }
 
@@ -137,7 +137,7 @@ const ScreenOrdemCard = {
       showToast("Execução registrada. Sincronizando...");
       updateSyncIndicator();
       if (navigator.onLine) syncQueueOnce().then(() => { updateSyncIndicator(); });
-      navigate("ordens");
+      navigate("home");
     });
 
     el.querySelector("#btn-recusar").addEventListener("click", async () => {
@@ -154,7 +154,7 @@ const ScreenOrdemCard = {
         status: "enviado", // não tenta sincronizar
       });
       showToast("Recusa registrada localmente");
-      navigate("ordens");
+      navigate("home");
     });
   },
 };
