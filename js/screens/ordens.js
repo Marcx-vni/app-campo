@@ -210,10 +210,20 @@ function atividadeCardHtml(row, produtos) {
     linhasExtra.push(["Preço Venda", formatMoeda(row["Valor Unit. Venda"])]); // coluna AG
     linhasExtra.push(["Total da venda", formatMoeda(row["Total Venda"])]);
   } else if (tipo === "E") {
-    const total = (Number(row["Qtde."]) || 0) * (Number(row["Valor Entrada"]) || 0);
-    linhasExtra.push(["Total gasto", formatMoeda(total)]);
+    const qtde = Number(row["Qtde."]) || 0; // coluna K
+    const valorUnit = Number(row["Valor Entrada"]) || 0; // coluna L
+    const totalEntrada =
+      row["Total Entrada"] !== undefined && row["Total Entrada"] !== null && row["Total Entrada"] !== ""
+        ? Number(row["Total Entrada"]) // coluna S, quando já recalculada
+        : qtde * valorUnit;
+    linhasExtra.push(["Qtd.", formatNumero(qtde)]);
+    linhasExtra.push(["Vlr. unit.", formatMoeda(valorUnit)]);
+    linhasExtra.push(["Total", formatMoeda(totalEntrada)]);
   }
 
+  // Na Compra o "complemento" do título já é o nome do produto (não tem
+  // Estufa) — por isso a linha de Produto abaixo é sempre mostrada, pra não
+  // ficar faltando essa informação no card.
   return `
     <div class="card">
       <div class="atividade-card-topo">
@@ -223,7 +233,7 @@ function atividadeCardHtml(row, produtos) {
           <div class="card-sub">${[pessoa, formatRelativeTimeFromSerial(row["Gravado em"])].filter(Boolean).join(" · ")}</div>
         </div>
       </div>
-      ${!isCompra ? `<div class="card-row"><span>Produto</span><span>${escapeHtml(produtoNome)}</span></div>` : ""}
+      <div class="card-row"><span>Produto</span><span>${escapeHtml(produtoNome)}</span></div>
       ${linhasExtra.map(([label, valor]) => `<div class="card-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(String(valor))}</span></div>`).join("")}
     </div>`;
 }
