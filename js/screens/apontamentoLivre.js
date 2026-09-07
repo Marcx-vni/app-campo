@@ -47,7 +47,7 @@ const ScreenApontamentoLivre = {
       .map((e) => `<option value="${e.__cod}">${escapeHtml(e["Estufa"])}</option>`)
       .join("");
     const meeiroOptions = lookups.meeiros
-      .map((m) => `<option value="${m.__cod}" ${m.__cod === meeiroCod ? "selected" : ""}>${escapeHtml(m["Meeiro"])}</option>`)
+      .map((m) => `<option value="${m.__cod}" ${String(m.__cod) === String(meeiroCod) ? "selected" : ""}>${escapeHtml(m["Meeiro"])}</option>`)
       .join("");
     const operacaoOptions = (op) =>
       lookups.operacoes
@@ -144,9 +144,18 @@ const ScreenApontamentoLivre = {
       const fields = { Bloco: bloco, Data: form.querySelector("#f-data").value };
 
       if (bloco !== "Compra") {
-        fields["Código Estufa"] = form.querySelector("#f-estufa").value;
-        fields["Código Meeiro"] = form.querySelector("#f-meeiro").value;
-        if (fields["Código Meeiro"]) localStorage.setItem(MEEIRO_STORAGE_KEY, fields["Código Meeiro"]);
+        // O <select> sempre devolve texto — convertemos para o mesmo tipo do
+        // "Codigo" original da planilha (normalmente número) antes de gravar,
+        // pra não escrever "3" (texto) numa coluna que a planilha trata como número.
+        const estufaVal = form.querySelector("#f-estufa").value;
+        const meeiroVal = form.querySelector("#f-meeiro").value;
+        const estufaMatch = lookups.estufas.find((e) => String(e.__cod) === String(estufaVal));
+        const meeiroMatch = lookups.meeiros.find((m) => String(m.__cod) === String(meeiroVal));
+        fields["Código Estufa"] = estufaMatch ? estufaMatch.__cod : estufaVal;
+        fields["Código Meeiro"] = meeiroMatch ? meeiroMatch.__cod : meeiroVal;
+        if (fields["Código Meeiro"] !== undefined && fields["Código Meeiro"] !== null && fields["Código Meeiro"] !== "") {
+          localStorage.setItem(MEEIRO_STORAGE_KEY, fields["Código Meeiro"]);
+        }
       }
       fields["Produto"] = form.querySelector("#f-produto").value;
       fields["Complemento"] = form.querySelector("#f-complemento").value;

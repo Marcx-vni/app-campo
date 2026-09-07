@@ -77,10 +77,13 @@ function validateBeforeSend(fields, lookups) {
   }
 
   if (lookups) {
-    if (fields["Código Meeiro"] && !lookups.meeiros.some((m) => m.__cod === fields["Código Meeiro"])) {
+    // Comparação por String() porque o <select> do formulário sempre devolve
+    // texto, mas o "Codigo" na planilha vem como número via Graph API
+    // (ex.: 3 !== "3" com === faria "Meeiro inexistente" mesmo estando certo).
+    if (fields["Código Meeiro"] && !lookups.meeiros.some((m) => String(m.__cod) === String(fields["Código Meeiro"]))) {
       return "Meeiro inexistente";
     }
-    if (fields["Código Estufa"] && !lookups.estufas.some((e) => e.__cod === fields["Código Estufa"])) {
+    if (fields["Código Estufa"] && !lookups.estufas.some((e) => String(e.__cod) === String(fields["Código Estufa"]))) {
       return "Estufa inexistente";
     }
     if (fields["Produto"]) {
