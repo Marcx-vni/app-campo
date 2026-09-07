@@ -76,8 +76,78 @@ async function updateSyncIndicator() {
     pending.length > 0 ? `Fila (${pending.length})` : "Fila";
 }
 
+// Primeiro nome, com a inicial maiúscula (o resto do nome/e-mail some) — pra
+// caber na saudação sem ficar comprido demais.
+function primeiroNome(nomeCompleto) {
+  if (!nomeCompleto) return "";
+  const primeiro = nomeCompleto.trim().split(/\s+/)[0];
+  return primeiro.charAt(0).toUpperCase() + primeiro.slice(1);
+}
+
+function saudacaoPorHorario() {
+  const hora = new Date().getHours();
+  if (hora < 12) return "Bom dia";
+  if (hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+// Data por extenso ("Segunda-feira, 7 de setembro") + saudação dinâmica, no
+// lugar do espaço vazio que ficava acima do nome no cabeçalho antigo.
+function atualizarSaudacaoData() {
+  const agora = new Date();
+  const dataFormatada = agora.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  // toLocaleDateString devolve tudo em minúsculo ("segunda-feira, 7 de
+  // setembro") — só a primeira letra precisa maiúscula.
+  const dataCapitalizada = dataFormatada.charAt(0).toUpperCase() + dataFormatada.slice(1);
+  document.getElementById("topbar-data").textContent = dataCapitalizada;
+  document.getElementById("topbar-saudacao").textContent =
+    `${saudacaoPorHorario()}, ${primeiroNome(getUserDisplayName())}`;
+}
+
+// Coordenadas fixas de Venda Nova do Imigrante/ES — o app sempre roda no
+// mesmo sítio, então não precisa de geolocalização nem de geocodificação
+// por nome de cidade, só a previsão pro ponto fixo.
+const CLIMA_LATITUDE = -20.3383;
+const CLIMA_LONGITUDE = -41.1352;
+
+// Ícone (emoji) a partir do "weather code" — tabela oficial da Open-Meteo:
+// https://open-meteo.com/en/docs
+function iconeClima(codigo) {
+  if (codigo === 0) return "☀️";
+  if (codigo === 1 || codigo === 2) return "🌤️";
+  if (codigo === 3) return "☁️";
+  if (codigo === 45 || codigo === 48) return "🌫️";
+  if ([51, 53, 55, 56, 57].includes(codigo)) return "🌦️";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(codigo)) return "🌧️";
+  if ([71, 73, 75, 77, 85, 86].includes(codigo)) return "🌨️";
+  if ([95, 96, 99].includes(codigo)) return "⛈️";
+  return "⛅";
+}
+
+// Busca a temperatura/condição atual (Open-Meteo — API pública, sem chave).
+// Falha silenciosa: clima é só um enfeite do cabeçalho, não pode travar nem
+// poluir o app se a API estiver fora do ar.
+async function atualizarClima() {
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${CLIMA_LATITUDE}&longitude=${CLIMA_LONGITUDE}` +
+      `&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo`;
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+    const temp = data?.current?.temperature_2m;
+    const codigo = data?.current?.weather_code;
+    if (temp === undefined || temp === null) return;
+    document.getElementById("clima-temp").textContent = `${Math.round(temp)}°C`;
+    document.getElementById("clima-icone").textContent = iconeClima(codigo);
+  } catch (e) {
+    console.warn("Falha ao buscar previsão do tempo (não crítico, segue sem clima):", e);
+  }
+}
+
 async function bootApp() {
-  document.getElementById("user-name").textContent = getUserDisplayName();
+  atualizarSaudacaoData();
+  atualizarClima(); // não bloqueia o boot — se falhar, fica só sem o clima
   document.getElementById("screen-login").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
   atualizarLabelArquivo();

@@ -28,14 +28,21 @@
   <!-- App principal (após login) -->
   <div id="app-shell" class="hidden">
     <header class="topbar">
-      <div>
-        <strong id="user-name">—</strong>
-        <div id="arquivo-atual" class="arquivo-atual" title="Toque para trocar o arquivo do OneDrive"></div>
+      <button id="btn-logout" class="icon-btn topbar-logout" title="Sair">⏻</button>
+      <div class="topbar-main">
+        <div class="topbar-info">
+          <div id="topbar-data" class="topbar-data">—</div>
+          <strong id="topbar-saudacao" class="topbar-saudacao">—</strong>
+          <div id="arquivo-atual" class="arquivo-atual" title="Toque para trocar o arquivo do OneDrive"></div>
+        </div>
+        <div class="topbar-clima">
+          <div class="topbar-clima-topo"><span id="clima-icone">⛅</span><span id="clima-temp">—</span></div>
+          <div id="clima-cidade" class="topbar-clima-cidade">Venda Nova do Imigrante</div>
+        </div>
+      </div>
+      <div class="topbar-status">
         <div id="sync-indicator" class="status-pill">offline</div>
         <span id="app-version" class="app-version"></span>
-      </div>
-      <div>
-        <button id="btn-logout" class="icon-btn" title="Sair">⏻</button>
       </div>
     </header>
 

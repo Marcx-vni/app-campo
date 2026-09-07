@@ -80,25 +80,56 @@ html, body {
 /* --- Layout --- */
 #app-shell { display: flex; flex-direction: column; height: 100vh; }
 .topbar {
+  position: relative;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 16px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 14px;
   background: linear-gradient(135deg, var(--verde), var(--verde-medio));
   color: white;
   flex-shrink: 0;
 }
-.topbar strong { font-size: 19px; font-weight: 600; display: block; }
+.topbar-logout {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 17px;
+  opacity: 0.8;
+}
+.topbar-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.topbar-info { min-width: 0; padding-right: 34px; }
+.topbar-data {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.72);
+  margin-bottom: 2px;
+}
+.topbar-saudacao { font-size: 20px; font-weight: 600; display: block; letter-spacing: -0.01em; }
 .topbar .arquivo-atual {
   font-size: 12px;
   color: rgba(255,255,255,0.72);
-  margin-top: 2px;
+  margin-top: 3px;
   cursor: pointer;
 }
+.topbar-clima { flex-shrink: 0; text-align: right; }
+.topbar-clima-topo {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  font-size: 19px;
+  font-weight: 600;
+}
+.topbar-clima-topo span:first-child { font-size: 20px; font-weight: 400; }
+.topbar-clima-cidade {
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.72);
+  margin-top: 2px;
+  max-width: 150px;
+}
+.topbar-status { display: flex; align-items: center; gap: 8px; }
 .app-version {
   font-size: 10px;
-  color: rgba(255,255,255,0.45);
-  margin-left: 6px;
+  color: rgba(255,255,255,0.5);
 }
 .icon-btn {
   background: none; border: none; color: white; font-size: 20px; cursor: pointer;
