@@ -5,7 +5,12 @@
 // possíveis e o app já trata offline por conta própria (fila em IndexedDB).
 // ============================================================================
 
-const CACHE_NAME = "app-campo-shell-v1";
+// IMPORTANTE: mude este número sempre que qualquer arquivo do app mudar.
+// É a MUDANÇA NO TEXTO deste arquivo que faz o navegador perceber que existe
+// uma versão nova do Service Worker e buscar tudo de novo — se só os outros
+// arquivos (js/*.js) mudarem e este número não mudar, o navegador pode
+// continuar servindo os arquivos antigos do cache indefinidamente.
+const CACHE_NAME = "app-campo-shell-v2";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -49,10 +54,17 @@ self.addEventListener("fetch", (event) => {
   // Nunca interceptar Microsoft Graph, login ou qualquer domínio externo — sempre rede.
   if (url.origin !== self.location.origin) return;
 
+  // Rede primeiro, cache só como reserva pra funcionar offline em campo.
+  // (Antes era "cache primeiro", o que fazia o app continuar rodando código
+  // antigo por tempo indefinido depois de cada atualização, mesmo com o
+  // arquivo novo já publicado no GitHub — essa troca evita esse problema.)
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).catch(() => caches.match("./index.html"));
-    })
+    fetch(event.request)
+      .then((res) => {
+        const copia = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copia));
+        return res;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
   );
 });
