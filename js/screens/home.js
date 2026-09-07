@@ -236,16 +236,18 @@ async function gerarCardFertiPng(dados) {
   const escala = 2;
   const colProduto = 176;
   const colSetor = 104;
-  const colTotal = 116;
   const altHeader = 106;
   const altCabecalho = 44;
   const altLinha = 48;
   const altFooter = 50;
   const raio = 22;
 
+  // Sem coluna de Total nem linha de Totais (a pedido do usuário, pra
+  // aproveitar espaço) — o card mostra só o lançamento em si, produto por
+  // produto e setor por setor.
   const setores = dados.setores.length ? dados.setores : [1];
-  const largura = colProduto + colSetor * setores.length + colTotal;
-  const altura = altHeader + altCabecalho + altLinha * (dados.produtos.length + 1) + altFooter;
+  const largura = colProduto + colSetor * setores.length;
+  const altura = altHeader + altCabecalho + altLinha * dados.produtos.length + altFooter;
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(largura * escala);
@@ -286,9 +288,7 @@ async function gerarCardFertiPng(dados) {
   // Cabeçalho da tabela (nome das colunas).
   let y = altHeader;
   ctx.fillStyle = "#F7F6F2";
-  ctx.fillRect(0, y, colProduto + colSetor * setores.length, altCabecalho);
-  ctx.fillStyle = "#EFE7D6";
-  ctx.fillRect(colProduto + colSetor * setores.length, y, colTotal, altCabecalho);
+  ctx.fillRect(0, y, largura, altCabecalho);
   ctx.font = `600 14px ${fonte}`;
   ctx.fillStyle = "#3A3A34";
   ctx.textAlign = "center";
@@ -296,10 +296,9 @@ async function gerarCardFertiPng(dados) {
     const cx = colProduto + colSetor * i + colSetor / 2;
     ctx.fillText(`Setor ${n}`, cx, y + altCabecalho / 2);
   });
-  ctx.fillText("Total", colProduto + colSetor * setores.length + colTotal / 2, y + altCabecalho / 2);
   y += altCabecalho;
 
-  // Uma linha por produto.
+  // Uma linha por produto — só os valores lançados, sem totalizador nenhum.
   dados.produtos.forEach((p, idx) => {
     if (idx % 2 === 1) {
       ctx.fillStyle = "#FAF9F6";
@@ -316,41 +315,8 @@ async function gerarCardFertiPng(dados) {
       const cx = colProduto + colSetor * i + colSetor / 2;
       ctx.fillText(v > 0 ? `${formatNumero(v)} g` : "—", cx, y + altLinha / 2);
     });
-    ctx.font = `600 14.5px ${fonte}`;
-    ctx.fillText(`${formatNumero(p.total)} g`, colProduto + colSetor * setores.length + colTotal / 2, y + altLinha / 2);
     y += altLinha;
   });
-
-  // Linha de totais, com o total geral destacado numa "pílula" verde.
-  ctx.strokeStyle = "#DAD7CC";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(14, y);
-  ctx.lineTo(largura - 14, y);
-  ctx.stroke();
-
-  ctx.font = `700 14.5px ${fonte}`;
-  ctx.fillStyle = "#1A1A1A";
-  ctx.textAlign = "left";
-  ctx.fillText("Totais", 16, y + altLinha / 2);
-  ctx.textAlign = "center";
-  setores.forEach((n, i) => {
-    const totalSetor = dados.produtos.reduce((soma, p) => soma + (p.porSetor[n] || 0), 0);
-    const cx = colProduto + colSetor * i + colSetor / 2;
-    ctx.fillText(`${formatNumero(totalSetor)} g`, cx, y + altLinha / 2);
-  });
-  const totalGeral = dados.produtos.reduce((soma, p) => soma + p.total, 0);
-  const pillX = colProduto + colSetor * setores.length + 8;
-  const pillW = colTotal - 16;
-  const pillY = y + 8;
-  const pillH = altLinha - 16;
-  ctx.fillStyle = "#1F3D2B";
-  retanguloArredondado(pillX, pillY, pillW, pillH, pillH / 2);
-  ctx.fill();
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = `700 13.5px ${fonte}`;
-  ctx.fillText(`${formatNumero(totalGeral)} g`, pillX + pillW / 2, pillY + pillH / 2);
-  y += altLinha;
 
   // Rodapé com o resumo (nº de produtos e setores).
   ctx.fillStyle = "#F1EFE7";
