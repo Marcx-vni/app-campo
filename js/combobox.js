@@ -17,7 +17,7 @@ function _comboNormalizar(s) {
 // Cria um combobox de busca dentro de `container` (elemento DOM já no documento).
 // opcoes: array de { value, label }
 // Devolve { getValue(), setValue(v) } pra ler/ajustar a seleção depois de criado.
-function criarComboBusca(container, opcoes, { valorInicial = "", placeholder = "Digite para buscar..." } = {}) {
+function criarComboBusca(container, opcoes, { valorInicial = "", placeholder = "Digite para buscar...", onChange } = {}) {
   const idBase = "combo-" + Math.random().toString(36).slice(2, 9);
   container.innerHTML = `
     <div class="combo-busca" style="position:relative;">
@@ -92,13 +92,17 @@ function criarComboBusca(container, opcoes, { valorInicial = "", placeholder = "
     if (container.contains(ev.target)) return;
     fecharLista();
     // se o texto digitado não corresponde a nenhuma seleção válida, limpa o campo
-    if (!inputValor.value) inputTexto.value = "";
+    if (!inputValor.value) {
+      inputTexto.value = "";
+      onChange?.(null);
+    }
   }
 
   function selecionar(opcao) {
     inputValor.value = opcao.value;
     inputTexto.value = opcao.label;
     fecharLista();
+    onChange?.(opcao);
   }
 
   inputTexto.addEventListener("focus", () => {
@@ -107,6 +111,7 @@ function criarComboBusca(container, opcoes, { valorInicial = "", placeholder = "
   inputTexto.addEventListener("input", () => {
     // digitar de novo invalida a seleção anterior até escolher algo da lista de novo
     inputValor.value = "";
+    onChange?.(null);
     renderLista(inputTexto.value);
   });
   inputTexto.addEventListener("keydown", (ev) => {

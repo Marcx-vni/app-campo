@@ -60,7 +60,15 @@ const ScreenApontamentoLivre = {
         ? (lookups.produtosVenda || []).filter((p) => p["Tipo"]).map((p) => ({ value: p["Tipo"], label: p["Tipo"] }))
         : lookups.produtos
             .filter((p) => p["Produto"] && (this.bloco !== "Uso" || Number(p["Estoque"]) > 0))
-            .map((p) => ({ value: p["Produto"], label: p["Produto"] }));
+            // saldo/unidade viajam junto com a opção (não aparecem no texto do
+            // combobox) só pra Aplicação mostrar o estoque disponível assim
+            // que a pessoa escolhe o produto, sem precisar ir na outra tela.
+            .map((p) => ({
+              value: p["Produto"],
+              label: p["Produto"],
+              estoque: Number(p["Estoque"]) || 0,
+              unidade: unidadeValida(p["Unidade"]),
+            }));
 
     // Estufa/Meeiro/Fornecedor: caixa de busca (mesmo padrão do Produto), não
     // lista de cards — mais rápido de usar quando a lista cresce. A Estufa só
@@ -145,6 +153,7 @@ const ScreenApontamentoLivre = {
 
       <label>🧴 Produto</label>
       <div id="f-produto-combo"></div>
+      ${this.bloco === "Uso" ? `<div id="produto-saldo-info" class="produto-saldo-info"></div>` : ""}
 
       ${camposEspecificos}
 
@@ -154,8 +163,16 @@ const ScreenApontamentoLivre = {
       <button type="submit" class="btn btn-primary btn-lg">Salvar apontamento</button>
     `;
 
+    const produtoSaldoInfo = form.querySelector("#produto-saldo-info");
     const produtoCombo = criarComboBusca(form.querySelector("#f-produto-combo"), produtoOpcoes, {
       placeholder: "Buscar produto...",
+      onChange: produtoSaldoInfo
+        ? (opcao) => {
+            produtoSaldoInfo.textContent = opcao
+              ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}${opcao.unidade ? " " + opcao.unidade : ""}`
+              : "";
+          }
+        : undefined,
     });
 
     let meeiroCombo = null;
