@@ -4,6 +4,11 @@
 // diferente da Atividade recente da tela Início, que só mostra os últimos 4).
 // Cada card tem um botão pra gerar o relatório e enviar por WhatsApp pro
 // meeiro, com as quantidades por setor, dia, estufa e produto.
+//
+// "Agrupar por estufa": quando a mesma estufa leva mais de um produto no
+// mesmo dia (ex.: um adubo + um bioestimulante), dá pra marcar os
+// lançamentos envolvidos e mandar um único WhatsApp com os dois — em vez de
+// mandar uma mensagem separada pra cada produto.
 // ============================================================================
 
 const ScreenFertiConsulta = {
@@ -22,6 +27,14 @@ const ScreenFertiConsulta = {
         </div>
         <div id="ferti-limpar-filtros" class="link-acao">Limpar filtros</div>
       </div>
+      <div class="ferti-agrupar-bar">
+        <div id="btn-agrupar-toggle" class="link-acao">🔗 Agrupar por estufa e enviar</div>
+        <div id="ferti-agrupar-selecao" class="ferti-agrupar-selecao" hidden>
+          <span id="ferti-agrupar-contagem">0 selecionados</span>
+          <button type="button" id="btn-agrupar-enviar" class="btn-compartilhar btn-compartilhar-inline">📲 Enviar agrupado</button>
+          <div id="btn-agrupar-cancelar" class="link-acao">Cancelar</div>
+        </div>
+      </div>
       <div id="ferti-consulta-list">Carregando...</div>
     `;
 
@@ -30,6 +43,15 @@ const ScreenFertiConsulta = {
     const meeiroSelect = container.querySelector("#filtro-meeiro");
     const dataDeInput = container.querySelector("#filtro-data-de");
     const dataAteInput = container.querySelector("#filtro-data-ate");
+    const toggleBtn = container.querySelector("#btn-agrupar-toggle");
+    const barSelecao = container.querySelector("#ferti-agrupar-selecao");
+    const contagemEl = container.querySelector("#ferti-agrupar-contagem");
+
+    // Estado da seleção pra agrupar — só existe enquanto "modo agrupar" está
+    // ativo. Guardado fora do renderList pra sobreviver a um re-render
+    // causado pelos filtros (busca/meeiro/data) enquanto a pessoa seleciona.
+    let modoAgrupar = false;
+    const selecionados = new Set();
 
     let registros = [];
     try {
@@ -54,18 +76,28 @@ const ScreenFertiConsulta = {
       );
 
     const cardHtml = (r) => {
-      // Arredondado pra dezena de grama (a pedido do usuário) — inclusive
+      // Arredondado pra centena de grama (a pedido do usuário) — inclusive
       // pra lançamentos antigos que ainda tenham valor "quebrado" gravado na
       // planilha. O total é recalculado a partir dos setores já
       // arredondados, em vez de usar a coluna "Total" da planilha, pra
       // sempre bater com a soma do que está mostrado no card.
       const setores = [1, 2, 3, 4, 5, 6]
-        .map((n) => ({ n, v: arredondarParaDezena(r[`Setor ${n}`]) }))
+        .map((n) => ({ n, v: arredondarGramasFerti(r[`Setor ${n}`]) }))
         .filter((s) => s.v > 0);
       const total = setores.reduce((soma, s) => soma + s.v, 0);
       const temDat = r["D.A.T"] !== undefined && r["D.A.T"] !== null && r["D.A.T"] !== "";
       return `
         <div class="card card-ferti">
+          ${
+            modoAgrupar
+              ? `<label class="ferti-checkbox">
+                   <input type="checkbox" class="ferti-select" data-idx="${r.__rowIndex}" ${
+                    selecionados.has(String(r.__rowIndex)) ? "checked" : ""
+                  } />
+                   Selecionar pra agrupar
+                 </label>`
+              : ""
+          }
           <div class="atividade-card-topo">
             <div class="atividade-icone atividade-icone-ferti">💧</div>
             <div style="flex:1; min-width:0;">
@@ -124,7 +156,50 @@ const ScreenFertiConsulta = {
           if (registro) compartilharTexto(montarTextoWhatsAppFerti(registro));
         });
       });
+      list.querySelectorAll(".ferti-select").forEach((chk) => {
+        chk.addEventListener("change", () => {
+          if (chk.checked) selecionados.add(chk.dataset.idx);
+          else selecionados.delete(chk.dataset.idx);
+          atualizarContagemSelecao();
+        });
+      });
     };
+
+    const atualizarContagemSelecao = () => {
+      contagemEl.textContent = `${selecionados.size} selecionado${selecionados.size === 1 ? "" : "s"}`;
+    };
+
+    // Alterna o "modo agrupar": mostra uma caixinha de seleção em cada card
+    // e a barra com o botão de enviar. Sair do modo limpa a seleção.
+    toggleBtn.addEventListener("click", () => {
+      modoAgrupar = !modoAgrupar;
+      selecionados.clear();
+      toggleBtn.textContent = modoAgrupar ? "✖️ Cancelar seleção" : "🔗 Agrupar por estufa e enviar";
+      barSelecao.hidden = !modoAgrupar;
+      atualizarContagemSelecao();
+      renderList();
+    });
+
+    container.querySelector("#btn-agrupar-cancelar").addEventListener("click", () => {
+      toggleBtn.click();
+    });
+
+    container.querySelector("#btn-agrupar-enviar").addEventListener("click", () => {
+      if (selecionados.size === 0) {
+        showToast("Selecione ao menos um lançamento pra agrupar.");
+        return;
+      }
+      const escolhidos = ordenados.filter((r) => selecionados.has(String(r.__rowIndex)));
+      // Um único recado só faz sentido pra uma estufa e um dia — senão a
+      // pessoa recebendo não sabe a quem/quando cada produto se refere.
+      const estufas = new Set(escolhidos.map((r) => r["Estufa"]));
+      const datas = new Set(escolhidos.map((r) => Number(r["Data"]) || 0));
+      if (estufas.size > 1 || datas.size > 1) {
+        showToast("Selecione lançamentos da mesma estufa e do mesmo dia pra agrupar.");
+        return;
+      }
+      compartilharTexto(montarTextoWhatsAppFertiAgrupado(escolhidos));
+    });
 
     [input, meeiroSelect, dataDeInput, dataAteInput].forEach((el) => {
       el.addEventListener("input", renderList);

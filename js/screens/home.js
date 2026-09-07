@@ -190,11 +190,11 @@ function chaveFerti(estufa, produto, dataSerial, meeiro) {
 // Texto pronto pra compartilhar por WhatsApp — um "relatório de campo" com
 // as quantidades por setor, pra mandar direto pro meeiro que vai aplicar.
 function montarTextoWhatsAppFerti(fertiRow) {
-  // Arredondado pra dezena de grama (a pedido do usuário) — lançamentos
+  // Arredondado pra centena de grama (a pedido do usuário) — lançamentos
   // novos já são gravados assim; isso também arredonda lançamentos antigos
   // que ainda tenham valor "quebrado", pra manter o recado sempre redondo.
   const setores = [1, 2, 3, 4, 5, 6]
-    .map((n) => ({ n, v: arredondarParaDezena(fertiRow[`Setor ${n}`]) }))
+    .map((n) => ({ n, v: arredondarGramasFerti(fertiRow[`Setor ${n}`]) }))
     .filter((s) => s.v > 0);
   const total = setores.reduce((soma, s) => soma + s.v, 0);
   // Dosagem e D.A.T ficaram de fora do texto a pedido do usuário — são
@@ -208,6 +208,38 @@ function montarTextoWhatsAppFerti(fertiRow) {
     `🌱 Produto: ${fertiRow["Produto"] || "—"}\n\n` +
     `${linhasSetor}\n\n` +
     `*Total todos os setores - ${formatNumero(total)} gramas*`
+  );
+}
+
+// Igual a montarTextoWhatsAppFerti, mas pra vários produtos da MESMA estufa
+// (e mesmo dia) num recado só — cabeçalho (estufa/data/meeiro) uma vez só,
+// um bloco "🌱 Produto" por lançamento, cada um com sua própria lista de
+// setor e total. Usado pela Consulta de Fertirrigações ("Agrupar por
+// estufa"), quando a mesma estufa leva mais de um produto no mesmo dia.
+function montarTextoWhatsAppFertiAgrupado(fertiRows) {
+  if (!fertiRows || fertiRows.length === 0) return "";
+  const primeiro = fertiRows[0];
+  const blocos = fertiRows.map((fertiRow) => {
+    const setores = [1, 2, 3, 4, 5, 6]
+      .map((n) => ({ n, v: arredondarGramasFerti(fertiRow[`Setor ${n}`]) }))
+      .filter((s) => s.v > 0);
+    const total = setores.reduce((soma, s) => soma + s.v, 0);
+    const linhasSetor = setores.map((s) => `Setor ${s.n}- ${formatNumero(s.v)} gramas`).join("\n");
+    // Primeira palavra do produto como rótulo curto do total (ex.: "KRISTALON
+    // 06-12-36" -> "Total KRISTALON - ..."), só pra não repetir o nome
+    // inteiro de novo em cada linha de total.
+    const nomeCurto = String(fertiRow["Produto"] || "").trim().split(/\s+/)[0] || fertiRow["Produto"] || "";
+    return (
+      `🌱 Produto: ${fertiRow["Produto"] || "—"}\n` +
+      `${linhasSetor}\n` +
+      `*Total ${nomeCurto} - ${formatNumero(total)} gramas*`
+    );
+  });
+  return (
+    `🧪 *Fertirrigação — ${primeiro["Estufa"] || "—"}*\n` +
+    `📅 ${formatExcelDate(primeiro["Data"])}\n` +
+    `👤 Meeiro: ${primeiro["Meeiro"] || "—"}\n\n` +
+    blocos.join("\n\n")
   );
 }
 
@@ -231,7 +263,7 @@ function atividadeCardHtml(row, produtos, fertiIndex) {
 
   if (fertiRow) {
     const setores = [1, 2, 3, 4, 5, 6]
-      .map((n) => arredondarParaDezena(fertiRow[`Setor ${n}`]))
+      .map((n) => arredondarGramasFerti(fertiRow[`Setor ${n}`]))
       .filter((v) => v > 0);
     const total = setores.reduce((a, b) => a + b, 0);
     return `

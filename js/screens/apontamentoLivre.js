@@ -126,6 +126,7 @@ const ScreenApontamentoLivre = {
         <input type="number" step="0.01" id="f-quantidade" required />
         <label>💲 Valor unitário</label>
         <input type="number" step="0.01" id="f-valor-unitario" required />
+        <div id="venda-total-calc" class="total-calc-info">Total da venda: —</div>
         <label>💲 Valor embalagem (opcional)</label>
         <input type="number" step="0.01" id="f-valor-embalagem" />
         <label>🧑 Cliente</label>
@@ -138,6 +139,7 @@ const ScreenApontamentoLivre = {
         <input type="number" step="0.01" id="f-quantidade" required />
         <label>💲 Valor unitário</label>
         <input type="number" step="0.01" id="f-valor-unitario" required />
+        <div id="compra-total-calc" class="total-calc-info">Total da compra: —</div>
         <label>🏭 Fornecedor</label>
         <div id="f-fornecedor-combo"></div>
         <label>📅 Data de vencimento (opcional)</label>
@@ -210,7 +212,7 @@ const ScreenApontamentoLivre = {
       // Arredondado pra grama inteira aqui também, pra bater com o que
       // calcularSetoresFerti vai gravar de fato — senão a prévia mostraria
       // um número e a planilha gravaria outro.
-      const qtds = setores.map((s) => arredondarParaDezena((s.plantas / 1000) * dosagem));
+      const qtds = setores.map((s) => arredondarGramasFerti((s.plantas / 1000) * dosagem));
       const linhas = setores
         .map(
           (s, i) =>
@@ -232,6 +234,20 @@ const ScreenApontamentoLivre = {
       const dat = calcularDAT(lookups, resolverEstufaNome(), form.querySelector("#f-data").value);
       if (dat !== null) campoData.value = dat;
     };
+
+    // Total ao vivo (Quantidade × Valor unitário) em Venda/Compra — só pra
+    // conferência na hora do lançamento, não é gravado em lugar nenhum
+    // (a planilha já calcula o total dela mesma a partir dos dois campos).
+    const atualizarTotalCalc = (elId, rotulo) => {
+      const el = form.querySelector(`#${elId}`);
+      if (!el) return;
+      const quantidade = Number(form.querySelector("#f-quantidade")?.value) || 0;
+      const valorUnitario = Number(form.querySelector("#f-valor-unitario")?.value) || 0;
+      const total = quantidade * valorUnitario;
+      el.textContent = total > 0 ? `${rotulo}: ${formatMoeda(total)}` : `${rotulo}: —`;
+    };
+    const atualizarTotalVenda = () => atualizarTotalCalc("venda-total-calc", "Total da venda");
+    const atualizarTotalCompra = () => atualizarTotalCalc("compra-total-calc", "Total da compra");
 
     if (this.bloco !== "Compra") {
       meeiroCombo = criarComboBusca(form.querySelector("#f-meeiro-combo"), meeiroOpcoes, {
@@ -257,6 +273,12 @@ const ScreenApontamentoLivre = {
     if (this.bloco === "Ferti") {
       form.querySelector("#f-dosagem-ferti").addEventListener("input", atualizarCalculoFerti);
       form.querySelector("#f-data").addEventListener("change", sugerirDAT);
+    }
+
+    if (this.bloco === "Venda" || this.bloco === "Compra") {
+      const atualizarTotal = this.bloco === "Venda" ? atualizarTotalVenda : atualizarTotalCompra;
+      form.querySelector("#f-quantidade").addEventListener("input", atualizarTotal);
+      form.querySelector("#f-valor-unitario").addEventListener("input", atualizarTotal);
     }
 
     form.addEventListener("submit", async (ev) => {
