@@ -72,17 +72,19 @@ const ScreenApontamentoLivre = {
     if (this.bloco === "Uso") {
       camposEspecificos = `
         <input type="hidden" id="f-operacao" value="Saída Consumo" />
-        <label>Quantidade</label>
+        <label>💧 Quantidade</label>
         <div class="campo-com-unidade">
           <input type="number" step="0.01" id="f-quantidade" required />
           <span class="unidade">litros</span>
         </div>
+        <label>🧪 Informar Dosagem p/ 20L (opcional)</label>
+        <input type="number" step="0.01" id="f-dosagem-alterada" placeholder="Deixe em branco pra usar a dosagem cadastrada" />
       `;
     } else if (this.bloco === "Ferti") {
       camposEspecificos = `
-        <label>Dosagem Ferti</label>
+        <label>🧪 Dosagem Ferti</label>
         <input type="number" step="0.01" id="f-dosagem-ferti" />
-        <label>D.A.T (dias após transplantio, opcional)</label>
+        <label>⏱️ D.A.T (dias após transplantio, opcional)</label>
         <input type="number" id="f-dat" />
         <div class="section-title">Qtde por setor (ao menos 1)</div>
         <div class="setores-grid">
@@ -94,45 +96,45 @@ const ScreenApontamentoLivre = {
     } else if (this.bloco === "Venda") {
       camposEspecificos = `
         <input type="hidden" id="f-operacao" value="Venda" />
-        <label>Quantidade</label>
+        <label>⚖️ Quantidade</label>
         <input type="number" step="0.01" id="f-quantidade" required />
-        <label>Valor unitário</label>
+        <label>💲 Valor unitário</label>
         <input type="number" step="0.01" id="f-valor-unitario" required />
-        <label>Valor embalagem (opcional)</label>
+        <label>💲 Valor embalagem (opcional)</label>
         <input type="number" step="0.01" id="f-valor-embalagem" />
-        <label>Cliente</label>
+        <label>🧑 Cliente</label>
         <select id="f-cliente" required><option value="">Selecione...</option>${clienteOptions}</select>
       `;
     } else if (this.bloco === "Compra") {
       camposEspecificos = `
         <input type="hidden" id="f-operacao" value="Entrada de fornecedor" />
-        <label>Quantidade</label>
+        <label>⚖️ Quantidade</label>
         <input type="number" step="0.01" id="f-quantidade" required />
-        <label>Valor unitário</label>
+        <label>💲 Valor unitário</label>
         <input type="number" step="0.01" id="f-valor-unitario" required />
         <label>🏭 Fornecedor</label>
         <div id="f-fornecedor-combo"></div>
-        <label>Data de vencimento (opcional)</label>
+        <label>📅 Data de vencimento (opcional)</label>
         <input type="date" id="f-vencimento" />
-        <label>Nota fiscal (opcional)</label>
+        <label>🧾 Nota fiscal (opcional)</label>
         <input type="text" id="f-nota-fiscal" />
       `;
     }
 
     form.innerHTML = `
-      <label>Data</label>
+      <label>📅 Data</label>
       <input type="date" id="f-data" value="${today}" required />
 
       ${this.bloco !== "Compra" ? `<label>👤 Meeiro</label><div id="f-meeiro-combo"></div>` : ""}
 
       ${this.bloco !== "Compra" ? `<label>🌿 Estufa</label><div id="f-estufa-combo"></div>` : ""}
 
-      <label>Produto</label>
+      <label>🧴 Produto</label>
       <div id="f-produto-combo"></div>
 
       ${camposEspecificos}
 
-      <label>Complemento / observação</label>
+      <label>📝 Complemento / observação</label>
       <textarea id="f-complemento"></textarea>
 
       <button type="submit" class="btn btn-primary btn-lg">Salvar apontamento</button>
@@ -188,6 +190,10 @@ const ScreenApontamentoLivre = {
       if (bloco === "Uso") {
         fields["Operação"] = "Saída Consumo";
         fields["Quantidade"] = Number(form.querySelector("#f-quantidade").value);
+        // Dosagem livre: se o usuário informar, vale mais que a dosagem cadastrada
+        // no produto (Tabela613) — decisão de campo tem prioridade sobre o padrão.
+        const dosagemAlterada = form.querySelector("#f-dosagem-alterada").value;
+        fields["Alterar dosagem para:"] = dosagemAlterada !== "" ? Number(dosagemAlterada) : null;
       } else if (bloco === "Ferti") {
         fields["Dosagem Ferti"] = Number(form.querySelector("#f-dosagem-ferti").value) || null;
         fields["D.A.T"] = Number(form.querySelector("#f-dat").value) || null;
