@@ -32,17 +32,12 @@ const ScreenApontamentoLivre = {
   renderForm(form, lookups) {
     const meeiroCod = getMeeiroSelecionado();
     // Na Venda, a lista de produtos vem da aba "Cadastro de Venda" (coluna "Tipo"),
-    // não do cadastro geral de produtos usado em Uso/Ferti/Compra.
-    const produtoOptions =
+    // não do cadastro geral de produtos usado em Uso/Ferti/Compra. A Tabela613
+    // tem ~400 itens — vira uma caixa de busca em vez de <select> gigante.
+    const produtoOpcoes =
       this.bloco === "Venda"
-        ? (lookups.produtosVenda || [])
-            .filter((p) => p["Tipo"])
-            .map((p) => `<option value="${escapeHtml(p["Tipo"])}">${escapeHtml(p["Tipo"])}</option>`)
-            .join("")
-        : lookups.produtos
-            .filter((p) => p["Produto"])
-            .map((p) => `<option value="${escapeHtml(p["Produto"])}">${escapeHtml(p["Produto"])}</option>`)
-            .join("");
+        ? (lookups.produtosVenda || []).filter((p) => p["Tipo"]).map((p) => ({ value: p["Tipo"], label: p["Tipo"] }))
+        : lookups.produtos.filter((p) => p["Produto"]).map((p) => ({ value: p["Produto"], label: p["Produto"] }));
     const estufaOptions = lookups.estufas
       .map((e) => `<option value="${e.__cod}">${escapeHtml(e["Estufa"])}</option>`)
       .join("");
@@ -128,7 +123,7 @@ const ScreenApontamentoLivre = {
       }
 
       <label>Produto</label>
-      <select id="f-produto" required><option value="">Selecione...</option>${produtoOptions}</select>
+      <div id="f-produto-combo"></div>
 
       ${camposEspecificos}
 
@@ -137,6 +132,10 @@ const ScreenApontamentoLivre = {
 
       <button type="submit" class="btn btn-primary btn-lg">Gravar</button>
     `;
+
+    const produtoCombo = criarComboBusca(form.querySelector("#f-produto-combo"), produtoOpcoes, {
+      placeholder: "Buscar produto...",
+    });
 
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -157,7 +156,11 @@ const ScreenApontamentoLivre = {
           localStorage.setItem(MEEIRO_STORAGE_KEY, fields["Código Meeiro"]);
         }
       }
-      fields["Produto"] = form.querySelector("#f-produto").value;
+      fields["Produto"] = produtoCombo.getValue();
+      if (!fields["Produto"]) {
+        showToast("Não foi possível enviar: selecione um produto da lista.");
+        return;
+      }
       fields["Complemento"] = form.querySelector("#f-complemento").value;
 
       if (bloco === "Uso") {

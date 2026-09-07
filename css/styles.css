@@ -138,6 +138,25 @@ textarea { resize: vertical; min-height: 60px; }
 .setores-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
 .setores-grid label { margin: 0; font-size: 12px; }
 
+/* --- Combobox de busca (input com filtro em tempo real) --- */
+.combo-lista {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  max-height: 240px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+}
+.combo-item { padding: 10px 12px; font-size: 14px; cursor: pointer; }
+.combo-item:active, .combo-item:hover { background: var(--gray-bg); }
+.combo-vazio { color: var(--muted); cursor: default; }
+.combo-vazio:hover { background: none; }
+
 /* --- Buttons --- */
 .btn {
   display: inline-block;
