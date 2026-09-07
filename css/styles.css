@@ -175,6 +175,52 @@ html, body {
 .card-row span:first-child { color: var(--muted); }
 .empty-state { text-align: center; color: var(--muted); padding: 40px 20px; }
 
+/* --- Resumo rápido (topo da tela Ordens) --- */
+.resumo-rapido { display: flex; gap: 10px; }
+.resumo-card {
+  flex: 1;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+.resumo-valor { font-size: 20px; font-weight: 700; color: var(--text); }
+.resumo-valor.resumo-alerta { color: var(--terracota); }
+.resumo-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* --- Ações rápidas --- */
+.acoes-rapidas { display: flex; gap: 10px; }
+.acao-rapida {
+  flex: 1;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+}
+.acao-rapida-icone { font-size: 18px; }
+.acao-rapida-texto { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.acao-rapida-primaria { background: var(--verde); border-color: var(--verde); }
+.acao-rapida-primaria .acao-rapida-texto { color: white; }
+
+/* --- Card de ordem com ícone (Minhas Ordens) --- */
+.ordem-card-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.ordem-card-icone {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--gray-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.ordem-card .card-title, .ordem-card .card-sub { margin-bottom: 0; }
+
 /* --- Título de tela --- */
 h2.page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 4px 0 2px; }
 .page-subtitle { font-size: 13px; color: var(--muted); margin: 0 0 14px; }

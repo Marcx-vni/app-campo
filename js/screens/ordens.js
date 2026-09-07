@@ -4,6 +4,7 @@
 // tabela Ordens) e Situação <> Executada. Sem nenhuma seleção manual —
 // cada pessoa só vê as ordens atribuídas ao e-mail com que ela entrou.
 // Atrasadas (Data Prevista < hoje) aparecem primeiro, em vermelho.
+// No topo, um resumo rápido do dia + atalhos pras telas mais usadas.
 // ============================================================================
 
 // Lembrete do último Meeiro escolhido no formulário de Apontamento Livre
@@ -21,12 +22,56 @@ function normalizeEmail(s) {
 const ScreenOrdens = {
   async render(container) {
     container.innerHTML = `
-      <h2 class="page-title">Minhas Ordens</h2>
+      <div class="resumo-rapido" id="resumo-rapido">
+        <div class="resumo-card">
+          <div class="resumo-valor" id="resumo-hoje">—</div>
+          <div class="resumo-label">Lançamentos hoje</div>
+        </div>
+        <div class="resumo-card">
+          <div class="resumo-valor resumo-alerta" id="resumo-estoque">—</div>
+          <div class="resumo-label">Estoque baixo</div>
+        </div>
+        <div class="resumo-card">
+          <div class="resumo-valor" id="resumo-fila">—</div>
+          <div class="resumo-label">Fila de sync</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:18px;">Ações rápidas</div>
+      <div class="acoes-rapidas">
+        <div class="acao-rapida acao-rapida-primaria" data-route="apontamento">
+          <span class="acao-rapida-icone">✏️</span>
+          <span class="acao-rapida-texto">Novo apontamento</span>
+        </div>
+        <div class="acao-rapida" data-route="estoque">
+          <span class="acao-rapida-icone">📦</span>
+          <span class="acao-rapida-texto">Ver estoque</span>
+        </div>
+      </div>
+
+      <h2 class="page-title" style="margin-top:22px;">Minhas Ordens</h2>
       <div id="ordens-list">Carregando...</div>
     `;
 
-    const { ordens } = await getLookupData();
+    container.querySelectorAll(".acao-rapida").forEach((el) => {
+      el.addEventListener("click", () => navigate(el.dataset.route));
+    });
+
+    const { ordens, produtos } = await getLookupData();
     const meuEmail = normalizeEmail(typeof getUserEmail === "function" ? getUserEmail() : null);
+
+    // Resumo rápido: preenchido em paralelo, não bloqueia a lista de ordens.
+    (async () => {
+      const [fila, pendentes] = await Promise.all([queueAll(), queuePending()]);
+      const hojeStr = new Date().toDateString();
+      const lancadosHoje = fila.filter((f) => new Date(f.createdAt).toDateString() === hojeStr).length;
+      const estoqueBaixo = (produtos || []).filter(
+        (p) => p["Produto"] && Number(p["Estoque"]) <= Number(p["Estoque Minimo"] || 0)
+      ).length;
+      container.querySelector("#resumo-hoje").textContent = lancadosHoje;
+      container.querySelector("#resumo-estoque").textContent = estoqueBaixo;
+      container.querySelector("#resumo-fila").textContent = pendentes.length;
+    })();
 
     const minhas = ordens
       .filter((o) => normalizeEmail(o["E-mail"]) === meuEmail && o["Situação"] !== "Executada")
@@ -42,9 +87,14 @@ const ScreenOrdens = {
     list.innerHTML = minhas
       .map(
         (o) => `
-      <div class="card ${o.atrasada ? "atrasado" : ""}" data-id="${o["ID Ordem"]}">
-        <div class="card-title">${escapeHtml(o["Estufa"] || "")} — ${escapeHtml(o["Produto"] || "")}</div>
-        <div class="card-sub">${o.atrasada ? "⚠ Atrasada — " : ""}Prevista: ${formatExcelDate(o["Data Prevista"])}</div>
+      <div class="card ordem-card ${o.atrasada ? "atrasado" : ""}" data-id="${o["ID Ordem"]}">
+        <div class="ordem-card-topo">
+          <div class="ordem-card-icone">${o.atrasada ? "⚠️" : "🧪"}</div>
+          <div class="ordem-card-titulo-wrap">
+            <div class="card-title">${escapeHtml(o["Estufa"] || "")} — ${escapeHtml(o["Produto"] || "")}</div>
+            <div class="card-sub">${o.atrasada ? "⚠ Atrasada — " : ""}Prevista: ${formatExcelDate(o["Data Prevista"])}</div>
+          </div>
+        </div>
         <div class="card-row"><span>Setor</span><span>${escapeHtml(o["Setor"] || "—")}</span></div>
         <div class="card-row"><span>Dosagem</span><span>${escapeHtml(String(o["Dosagem Prevista"] ?? "—"))}</span></div>
         <div class="card-row"><span>Qtde prevista</span><span>${escapeHtml(String(o["Volume/Qtde Prevista"] ?? "—"))}</span></div>
