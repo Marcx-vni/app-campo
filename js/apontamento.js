@@ -225,7 +225,7 @@ function prepararRegistro(fields, lookups, seq, usuario) {
       "Código Meeiro": fields["Código Meeiro"],
       "Meeiro": meeiroNome,
       "Plantio": plantioLabel,
-      "Volume Calda": quantidadeLitros * 1000,
+      "Volume Calda": quantidadeLitros,
       "Qtde.": totalProduto,
     });
   } else if (bloco === "Ferti") {
