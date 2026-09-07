@@ -4,9 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>App de Campo</title>
-<meta name="theme-color" content="#2e7d32" />
+<meta name="theme-color" content="#1F3D2B" />
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/styles.css" />
 <script src="js/vendor/msal-browser.min.js"></script>
 </head>
@@ -27,11 +30,13 @@
     <header class="topbar">
       <div>
         <strong id="user-name">—</strong>
-        <span id="sync-indicator" class="badge badge-muted">offline</span>
-        <div id="arquivo-atual" class="muted" style="font-size:11px;"></div>
+        <div id="arquivo-atual" class="arquivo-atual"></div>
+        <div id="sync-indicator" class="status-pill">offline</div>
       </div>
-      <button id="btn-trocar-arquivo" class="icon-btn" title="Trocar arquivo do OneDrive">📄</button>
-      <button id="btn-logout" class="icon-btn" title="Sair">⏻</button>
+      <div>
+        <button id="btn-trocar-arquivo" class="icon-btn" title="Trocar arquivo do OneDrive">📄</button>
+        <button id="btn-logout" class="icon-btn" title="Sair">⏻</button>
+      </div>
     </header>
 
     <main id="main-content"></main>
@@ -61,6 +66,7 @@
   <script src="js/apontamento.js"></script>
   <script src="js/sync.js"></script>
   <script src="js/combobox.js"></script>
+  <script src="js/listaSelecao.js"></script>
   <script src="js/screens/fileSelector.js"></script>
   <script src="js/screens/ordens.js"></script>
   <script src="js/screens/ordemCard.js"></script>

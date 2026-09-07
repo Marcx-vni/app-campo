@@ -37,21 +37,21 @@ function showToast(message, ms = 2800) {
 function atualizarLabelArquivo() {
   const el = document.getElementById("arquivo-atual");
   const arquivo = typeof getSelectedFile === "function" ? getSelectedFile() : null;
-  el.textContent = arquivo ? `Arquivo: ${arquivo.name}` : "";
+  el.textContent = arquivo ? arquivo.name : "";
 }
 
 async function updateSyncIndicator() {
-  const badge = document.getElementById("sync-indicator");
+  const pill = document.getElementById("sync-indicator");
   const pending = await queuePending();
   if (!navigator.onLine) {
-    badge.textContent = "offline";
-    badge.className = "badge badge-warn";
+    pill.textContent = "offline";
+    pill.className = "status-pill status-pill-warn";
   } else if (pending.length > 0) {
-    badge.textContent = `${pending.length} pendente(s)`;
-    badge.className = "badge badge-pending";
+    pill.textContent = `${pending.length} pendente(s)`;
+    pill.className = "status-pill status-pill-pending";
   } else {
-    badge.textContent = "sincronizado";
-    badge.className = "badge badge-ok";
+    pill.textContent = "sincronizado";
+    pill.className = "status-pill";
   }
   document.getElementById("fila-badge-label").textContent =
     pending.length > 0 ? `Fila (${pending.length})` : "Fila";
