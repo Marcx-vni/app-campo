@@ -151,6 +151,12 @@ function formatMoeda(valor) {
   return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Número com separador de milhar "." e decimal "," (padrão brasileiro), sem
+// zeros à direita desnecessários — ex.: 1234.5 -> "1.234,5", 0.045 -> "0,045".
+function formatNumero(valor) {
+  return Number(valor || 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+}
+
 // Card de "Atividade recente" a partir de uma linha real do Registro de
 // Inventario (não da fila local) — reflete o que foi gravado por qualquer
 // aparelho, ordenado pela coluna "Gravado em" (AF).
@@ -169,12 +175,14 @@ function atividadeCardHtml(row, produtos) {
   if (tipo === "S") {
     const produtoInfo = (produtos || []).find((p) => p["Produto"] === produtoNome);
     const unidade = produtoInfo?.["Unidade"] || "";
-    linhasExtra.push(["Volume aplicado", `${Number(row["Volume Calda"]) || 0} L`]);
-    linhasExtra.push(["Qtde. usada", `${Number(row["Qtde."]) || 0}${unidade ? " " + unidade : ""}`]); // coluna K
+    linhasExtra.push(["Volume aplicado", `${formatNumero(row["Volume Calda"])} L`]); // coluna J
+    linhasExtra.push(["Qtde. usada", `${formatNumero(row["Qtde."])}${unidade ? " " + unidade : ""}`]); // coluna K
     if (row["Total Saida"] !== undefined && row["Total Saida"] !== null && row["Total Saida"] !== "") {
       linhasExtra.push(["Total", formatMoeda(row["Total Saida"])]); // coluna U
     }
   } else if (tipo === "V") {
+    linhasExtra.push(["Qtde. vendida", formatNumero(row["Qtde."])]); // coluna K
+    linhasExtra.push(["Preço Venda", formatMoeda(row["Valor Unit. Venda"])]); // coluna AG
     linhasExtra.push(["Total da venda", formatMoeda(row["Total Venda"])]);
   } else if (tipo === "E") {
     const total = (Number(row["Qtde."]) || 0) * (Number(row["Valor Entrada"]) || 0);
