@@ -48,29 +48,17 @@ const ScreenApontamentoLivre = {
         ? (lookups.produtosVenda || []).filter((p) => p["Tipo"]).map((p) => ({ value: p["Tipo"], label: p["Tipo"] }))
         : lookups.produtos.filter((p) => p["Produto"]).map((p) => ({ value: p["Produto"], label: p["Produto"] }));
 
-    // Estufa e Meeiro têm poucas opções fixas — viram lista vertical de cards
-    // em vez de <select> nativo (mais rápido de tocar em campo, com luvas).
-    // Na Estufa, a linha de contexto mostra o plantio Ativo (se houver) — dado
-    // útil pra decisão, evita escolher a estufa errada.
-    const estufaItens = lookups.estufas.map((e) => {
-      const plantios = plantiosAtivos(lookups, e["Estufa"]);
-      return {
-        value: e.__cod,
-        titulo: e["Estufa"],
-        contexto: plantios.length ? plantios.join(", ") : "Sem plantio ativo",
-        icone: "🌿",
-      };
-    });
-    const meeiroItens = lookups.meeiros.map((m) => ({
-      value: m.__cod,
-      titulo: m["Meeiro"],
-      icone: "👤",
-    }));
-    const fornecedorItens = lookups.fornecedores.map((f) => ({
-      value: f["Fornecedor"],
-      titulo: f["Fornecedor"],
-      icone: "🏭",
-    }));
+    // Estufa/Meeiro/Fornecedor: caixa de busca (mesmo padrão do Produto), não
+    // lista de cards — mais rápido de usar quando a lista cresce. A Estufa só
+    // lista as que têm plantio Ativo agora (as sem plantio não servem pra
+    // lançamento mesmo, então nem aparecem pra escolher por engano); o nome do
+    // plantio aparece junto no rótulo pra confirmar de relance.
+    const estufaOpcoes = lookups.estufas
+      .map((e) => ({ __cod: e.__cod, nome: e["Estufa"], plantios: plantiosAtivos(lookups, e["Estufa"]) }))
+      .filter((e) => e.plantios.length > 0)
+      .map((e) => ({ value: e.__cod, label: `🌿 ${e.nome} — ${e.plantios.join(", ")}` }));
+    const meeiroOpcoes = lookups.meeiros.map((m) => ({ value: m.__cod, label: `👤 ${m["Meeiro"]}` }));
+    const fornecedorOpcoes = lookups.fornecedores.map((f) => ({ value: f["Fornecedor"], label: `🏭 ${f["Fornecedor"]}` }));
 
     const clienteOptions = (lookups.clientes || [])
       .map((c) => `<option value="${escapeHtml(c["Cliente"])}">${escapeHtml(c["Cliente"])}</option>`)
@@ -121,7 +109,7 @@ const ScreenApontamentoLivre = {
         <label>Valor unitário</label>
         <input type="number" step="0.01" id="f-valor-unitario" required />
         <label>Fornecedor</label>
-        <div id="f-fornecedor-lista" class="lista-selecao"></div>
+        <div id="f-fornecedor-combo"></div>
         <label>Data de vencimento (opcional)</label>
         <input type="date" id="f-vencimento" />
         <label>Nota fiscal (opcional)</label>
@@ -133,9 +121,9 @@ const ScreenApontamentoLivre = {
       <label>Data</label>
       <input type="date" id="f-data" value="${today}" required />
 
-      ${this.bloco !== "Compra" ? `<label>Meeiro</label><div id="f-meeiro-lista" class="lista-selecao"></div>` : ""}
+      ${this.bloco !== "Compra" ? `<label>Meeiro</label><div id="f-meeiro-combo"></div>` : ""}
 
-      ${this.bloco !== "Compra" ? `<label>Estufa</label><div id="f-estufa-lista" class="lista-selecao"></div>` : ""}
+      ${this.bloco !== "Compra" ? `<label>Estufa</label><div id="f-estufa-combo"></div>` : ""}
 
       <label>Produto</label>
       <div id="f-produto-combo"></div>
@@ -152,16 +140,21 @@ const ScreenApontamentoLivre = {
       placeholder: "Buscar produto...",
     });
 
-    let meeiroLista = null;
-    let estufaLista = null;
-    let fornecedorLista = null;
+    let meeiroCombo = null;
+    let estufaCombo = null;
+    let fornecedorCombo = null;
     if (this.bloco !== "Compra") {
-      meeiroLista = criarListaSelecao(form.querySelector("#f-meeiro-lista"), meeiroItens, {
+      meeiroCombo = criarComboBusca(form.querySelector("#f-meeiro-combo"), meeiroOpcoes, {
+        placeholder: "Buscar meeiro...",
         valorInicial: meeiroCod,
       });
-      estufaLista = criarListaSelecao(form.querySelector("#f-estufa-lista"), estufaItens);
+      estufaCombo = criarComboBusca(form.querySelector("#f-estufa-combo"), estufaOpcoes, {
+        placeholder: "Buscar estufa...",
+      });
     } else {
-      fornecedorLista = criarListaSelecao(form.querySelector("#f-fornecedor-lista"), fornecedorItens);
+      fornecedorCombo = criarComboBusca(form.querySelector("#f-fornecedor-combo"), fornecedorOpcoes, {
+        placeholder: "Buscar fornecedor...",
+      });
     }
 
     form.addEventListener("submit", async (ev) => {
@@ -170,11 +163,11 @@ const ScreenApontamentoLivre = {
       const fields = { Bloco: bloco, Data: form.querySelector("#f-data").value };
 
       if (bloco !== "Compra") {
-        // A lista de seleção sempre devolve texto — convertemos para o mesmo tipo
+        // A caixa de busca sempre devolve texto — convertemos para o mesmo tipo
         // do "Codigo" original da planilha (normalmente número) antes de gravar,
         // pra não escrever "3" (texto) numa coluna que a planilha trata como número.
-        const estufaVal = estufaLista.getValue();
-        const meeiroVal = meeiroLista.getValue();
+        const estufaVal = estufaCombo.getValue();
+        const meeiroVal = meeiroCombo.getValue();
         const estufaMatch = lookups.estufas.find((e) => String(e.__cod) === String(estufaVal));
         const meeiroMatch = lookups.meeiros.find((m) => String(m.__cod) === String(meeiroVal));
         fields["Código Estufa"] = estufaMatch ? estufaMatch.__cod : estufaVal;
@@ -209,7 +202,7 @@ const ScreenApontamentoLivre = {
         fields["Operação"] = "Entrada de fornecedor";
         fields["Quantidade"] = Number(form.querySelector("#f-quantidade").value);
         fields["Valor Unitário"] = Number(form.querySelector("#f-valor-unitario").value);
-        fields["Fornecedor"] = fornecedorLista.getValue();
+        fields["Fornecedor"] = fornecedorCombo.getValue();
         const venc = form.querySelector("#f-vencimento").value;
         fields["Data Vencimento"] = venc || null;
         fields["Nota Fiscal"] = form.querySelector("#f-nota-fiscal").value || null;
