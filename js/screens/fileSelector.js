@@ -10,7 +10,7 @@
 // Caminho exato conhecido do arquivo (mais confiável que a busca por nome,
 // que depende de um índice que pode demorar a atualizar). Se o arquivo for
 // movido, a busca abaixo continua funcionando como alternativa manual.
-const CAMINHO_CONHECIDO = "Documentos/Planilhas Sitio/Controle Sitio EPI 2026.xlsm";
+const CAMINHO_CONHECIDO = "Power BI/Controle Sitio 2026.xlsm";
 
 const ScreenFileSelector = {
   async render(container, onSelected) {
