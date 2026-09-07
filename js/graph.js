@@ -214,6 +214,30 @@ function comCodigoNormalizado(lista) {
   return lista;
 }
 
+// Acha a chave real de uma coluna cujo cabeçalho pode vir em branco na
+// planilha (ex.: "Grupo" e "Valor em Estoque" no Cadastro de Produtos E
+// Estoque, coluna D e K) — tenta pelo(s) nome(s) candidato(s) normalizado(s)
+// e, se não achar (cabeçalho realmente vazio), cai pra POSIÇÃO da coluna
+// (índice 0-based, A=0) na própria tabela. Compartilhada entre telas que
+// precisam ler/gravar essas colunas.
+function acharChavePorNomeOuPosicao(lista, nomesCandidatos, indicePosicao) {
+  const headers = (lista && lista.headers) || [];
+  const porNome = headers.find((h) => nomesCandidatos.includes(normKey(h)));
+  if (porNome !== undefined) return porNome;
+  if (indicePosicao !== undefined && headers.length > indicePosicao) return headers[indicePosicao];
+  return undefined;
+}
+
+// Coluna D (Grupo/Categoria) do Cadastro de Produtos E Estoque.
+function acharChaveGrupo(produtos) {
+  return acharChavePorNomeOuPosicao(produtos, ["grupo", "categoria"], 3) ?? " ";
+}
+
+// Coluna K (Valor em Estoque) do Cadastro de Produtos E Estoque.
+function acharChaveValorEstoque(produtos) {
+  return acharChavePorNomeOuPosicao(produtos, ["valoremestoque", "valorestoque", "valortotalestoque"], 10);
+}
+
 async function fetchLookupData() {
   const [produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes, plantio] =
     await Promise.all([

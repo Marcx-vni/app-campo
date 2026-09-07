@@ -130,10 +130,18 @@ function validateBeforeSend(fields, lookups) {
     const encontrado =
       bloco === "Venda" ? achar(lookups.produtosVenda, "Tipo", fields["Produto"]) : achar(lookups.produtos, "Produto", fields["Produto"]);
     if (!encontrado) return "Produto inexistente";
-    // Uso consome do estoque físico do insumo — sem saldo, não faz sentido
-    // deixar lançar (a planilha ficaria negativa sem o usuário perceber na hora).
-    if (bloco === "Uso" && Number(encontrado["Estoque"]) <= 0) {
-      return `${fields["Produto"]} está sem estoque disponível`;
+    // Uso consome do estoque físico do insumo — nunca deixa lançar algo que
+    // deixaria o saldo negativo (nem quando já está zerado, nem quando a
+    // quantidade pedida é maior do que o que resta).
+    if (bloco === "Uso") {
+      const estoqueAtual = Number(encontrado["Estoque"]) || 0;
+      if (estoqueAtual <= 0) {
+        return `${fields["Produto"]} está sem estoque disponível`;
+      }
+      const totalProduto = calcularQtdeUso(fields, encontrado["Dosagem ML/20LT"]);
+      if (totalProduto > estoqueAtual) {
+        return `${fields["Produto"]}: quantidade pedida (${totalProduto.toLocaleString("pt-BR", { maximumFractionDigits: 3 })}) é maior que o estoque disponível (${estoqueAtual.toLocaleString("pt-BR", { maximumFractionDigits: 3 })})`;
+      }
     }
   }
   if (fields["Operação"] && bloco !== "Venda" && !achar(lookups.operacoes, "Operação", fields["Operação"])) {
@@ -154,6 +162,19 @@ function validateBeforeSend(fields, lookups) {
   }
 
   return null; // ok
+}
+
+// Quanto do produto (coluna K) uma aplicação de Uso realmente consome —
+// mesma fórmula usada tanto pra validar estoque antes de enviar quanto pra
+// montar a linha final gravada, garantindo que as duas contas nunca divirjam.
+// `dosagemPadrao` é a dosagem cadastrada no produto (ml/20L), Tabela613.
+function calcularQtdeUso(fields, dosagemPadrao) {
+  dosagemPadrao = Number(dosagemPadrao) || 0;
+  const dosagemAlterada = Number(fields["Alterar dosagem para:"]) || 0;
+  const quantidadeLitros = Number(fields["Quantidade"]) || 0;
+  if (dosagemPadrao + dosagemAlterada === 0) return quantidadeLitros;
+  if (dosagemAlterada > 0) return (quantidadeLitros / 20) * dosagemAlterada / 1000;
+  return (quantidadeLitros / 20) * dosagemPadrao / 1000;
 }
 
 // ============================================================================
@@ -188,7 +209,7 @@ function prepararRegistro(fields, lookups, seq, usuario) {
     const p = achar(lookups.produtos, "Produto", fields["Produto"]);
     if (p) {
       codigoProduto = p["Código"];
-      tipoProduto = p[" "]; // classificação (DEFENSIVO/FOLIARES/...) — coluna sem nome na planilha original
+      tipoProduto = p[acharChaveGrupo(lookups.produtos)]; // classificação (DEFENSIVO/FOLIARES/...)
       descricaoProduto = p["Produto"];
       dosagemPadrao = Number(p["Dosagem ML/20LT"]) || 0;
     }
@@ -213,16 +234,8 @@ function prepararRegistro(fields, lookups, seq, usuario) {
   let financeiro = null;
 
   if (bloco === "Uso") {
-    const dosagemAlterada = Number(fields["Alterar dosagem para:"]) || 0;
     const quantidadeLitros = Number(fields["Quantidade"]) || 0;
-    let totalProduto;
-    if (dosagemPadrao + dosagemAlterada === 0) {
-      totalProduto = quantidadeLitros;
-    } else if (dosagemAlterada > 0) {
-      totalProduto = (quantidadeLitros / 20) * dosagemAlterada / 1000;
-    } else {
-      totalProduto = (quantidadeLitros / 20) * dosagemPadrao / 1000;
-    }
+    const totalProduto = calcularQtdeUso(fields, dosagemPadrao);
     Object.assign(inventario, {
       "Tipo Movimentação": "S",
       "Código Estufa": fields["Código Estufa"],

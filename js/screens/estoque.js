@@ -15,30 +15,26 @@ const ScreenEstoque = {
         <input type="search" id="busca-produto" placeholder="Buscar produto..." />
       </div>
       <div id="estoque-grupo-label" class="estoque-grupo-label"></div>
+      <div id="estoque-valor-total" class="estoque-valor-total"></div>
       <div id="estoque-list"></div>
     `;
 
     const { produtos } = await getLookupData();
     const list = container.querySelector("#estoque-list");
     const grupoLabel = container.querySelector("#estoque-grupo-label");
+    const valorTotalEl = container.querySelector("#estoque-valor-total");
     const input = container.querySelector("#busca-produto");
 
-    // A coluna "Grupo" (D) às vezes vem com o cabeçalho em branco na planilha
-    // — tenta achar pelo nome (Grupo/Categoria); se não achar (cabeçalho
-    // vazio mesmo), cai pra posição da coluna D (índice 3, A=0) da própria
-    // tabela, que é mais confiável do que chutar um texto fixo pra chave.
-    const acharChaveGrupo = () => {
-      const headers = produtos.headers || [];
-      const porNome = headers.find((h) => ["grupo", "categoria"].includes(normKey(h)));
-      if (porNome !== undefined) return porNome;
-      if (headers.length > 3) return headers[3];
-      return " ";
-    };
-    const GRUPO_KEY = acharChaveGrupo();
+    const GRUPO_KEY = acharChaveGrupo(produtos);
+    // Coluna K (Valor em Estoque) — se a planilha não tiver essa coluna
+    // identificável, VALOR_KEY fica undefined e simplesmente não mostramos
+    // valor nenhum, em vez de arriscar mostrar um número de outra coluna.
+    const VALOR_KEY = acharChaveValorEstoque(produtos);
 
     const abaixoDoMinimo = (p) => Number(p["Estoque"]) <= Number(p["Estoque Minimo"] || 0);
     const temSaldo = (p) => Number(p["Estoque"]) > 0;
     const nomeGrupo = (p) => (p[GRUPO_KEY] && String(p[GRUPO_KEY]).trim()) || "Sem categoria";
+    const valorEstoque = (p) => (VALOR_KEY ? Number(p[VALOR_KEY]) || 0 : 0);
 
     const itemHtml = (p) => {
       const critico = abaixoDoMinimo(p);
@@ -49,20 +45,24 @@ const ScreenEstoque = {
           <div class="estoque-item-nome">${escapeHtml(p["Produto"])}</div>
           <div class="estoque-item-categoria">${escapeHtml(nomeGrupo(p))}${p["Ctr. Estoque Minimo"] ? ` · Ctr. mín. ${escapeHtml(String(p["Ctr. Estoque Minimo"]))}` : ""}</div>
         </div>
-        <div class="estoque-item-saldo">${escapeHtml(formatNumeroEstoque(p["Estoque"]))} ${escapeHtml(unidadeValida(p["Unidade"]))}</div>
+        <div class="estoque-item-saldo">
+          <div>${escapeHtml(formatNumeroEstoque(p["Estoque"]))} ${escapeHtml(unidadeValida(p["Unidade"]))}</div>
+          ${VALOR_KEY ? `<div class="estoque-item-valor">${escapeHtml(formatMoeda(valorEstoque(p)))}</div>` : ""}
+        </div>
       </div>`;
     };
 
-    // Resumo do grupo: se todos os produtos do grupo usam a mesma unidade,
-    // soma o saldo ("120 L"); senão, como somar unidades diferentes não faz
-    // sentido, mostra só a quantidade de produtos.
+    // Resumo do grupo: quantidade (soma se todos usam a mesma unidade, senão
+    // conta de produtos) + valor em estoque total do grupo (coluna K somada).
     const resumoGrupoHtml = (itens) => {
       const unidades = new Set(itens.map((p) => unidadeValida(p["Unidade"])).filter(Boolean));
-      if (unidades.size === 1) {
-        const total = itens.reduce((soma, p) => soma + (Number(p["Estoque"]) || 0), 0);
-        return `${formatNumeroEstoque(total)} ${[...unidades][0]}`;
-      }
-      return `${itens.length} produto${itens.length === 1 ? "" : "s"}`;
+      const qtdeTexto =
+        unidades.size === 1
+          ? `${formatNumeroEstoque(itens.reduce((soma, p) => soma + (Number(p["Estoque"]) || 0), 0))} ${[...unidades][0]}`
+          : `${itens.length} produto${itens.length === 1 ? "" : "s"}`;
+      if (!VALOR_KEY) return qtdeTexto;
+      const valorTotal = itens.reduce((soma, p) => soma + valorEstoque(p), 0);
+      return `${qtdeTexto} · ${formatMoeda(valorTotal)}`;
     };
 
     const grupoHtml = (nome, itens) => `
@@ -82,9 +82,13 @@ const ScreenEstoque = {
       grupoLabel.textContent = "Grupos de produtos";
       const comSaldo = produtos.filter((p) => p["Produto"] && temSaldo(p));
       if (comSaldo.length === 0) {
+        valorTotalEl.textContent = "";
         list.innerHTML = `<div class="empty-state">Nenhum produto com saldo em estoque no momento.</div>`;
         return;
       }
+      valorTotalEl.textContent = VALOR_KEY
+        ? `Valor total em estoque: ${formatMoeda(comSaldo.reduce((soma, p) => soma + valorEstoque(p), 0))}`
+        : "";
       const grupos = new Map();
       comSaldo.forEach((p) => {
         const g = nomeGrupo(p);
@@ -103,6 +107,7 @@ const ScreenEstoque = {
 
     const renderBusca = (termo) => {
       grupoLabel.textContent = "";
+      valorTotalEl.textContent = "";
       const filtrados = produtos.filter((p) => p["Produto"] && p["Produto"].toLowerCase().includes(termo));
       if (filtrados.length === 0) {
         list.innerHTML = `<div class="empty-state">Nenhum produto encontrado.</div>`;
