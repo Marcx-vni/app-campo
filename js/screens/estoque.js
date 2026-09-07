@@ -43,7 +43,7 @@ const ScreenEstoque = {
         <div class="estoque-item-icone">📦</div>
         <div class="estoque-item-texto">
           <div class="estoque-item-nome">${escapeHtml(p["Produto"])}</div>
-          <div class="estoque-item-categoria">${escapeHtml(nomeGrupo(p))}${p["Ctr. Estoque Minimo"] ? ` · Ctr. mín. ${escapeHtml(String(p["Ctr. Estoque Minimo"]))}` : ""}</div>
+          <div class="estoque-item-categoria">${escapeHtml(nomeGrupo(p))}${p["Ctr. Estoque Minimo"] ? ` · Ctr. mín. ${escapeHtml(formatNumeroEstoque(p["Ctr. Estoque Minimo"]))}` : ""}</div>
         </div>
         <div class="estoque-item-saldo">
           <div>${escapeHtml(formatNumeroEstoque(p["Estoque"]))} ${escapeHtml(unidadeValida(p["Unidade"]))}</div>
@@ -108,9 +108,13 @@ const ScreenEstoque = {
     const renderBusca = (termo) => {
       grupoLabel.textContent = "";
       valorTotalEl.textContent = "";
-      const filtrados = produtos.filter((p) => p["Produto"] && p["Produto"].toLowerCase().includes(termo));
+      // Mesma regra da navegação por grupo: só produto com saldo em estoque
+      // aparece — buscar um produto zerado não devolve nada, de propósito.
+      const filtrados = produtos.filter(
+        (p) => p["Produto"] && p["Produto"].toLowerCase().includes(termo) && temSaldo(p)
+      );
       if (filtrados.length === 0) {
-        list.innerHTML = `<div class="empty-state">Nenhum produto encontrado.</div>`;
+        list.innerHTML = `<div class="empty-state">Nenhum produto com saldo em estoque encontrado com esse nome.</div>`;
         return;
       }
       list.innerHTML = filtrados.slice(0, 100).map(itemHtml).join("");
