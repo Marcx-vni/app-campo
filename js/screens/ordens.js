@@ -64,28 +64,43 @@ const ScreenOrdens = {
     });
     container.querySelector("#atividade-ver-tudo").addEventListener("click", () => navigate("fila"));
 
-    const { ordens, produtos, estufas, meeiros } = await getLookupData();
+    const { ordens, produtos } = await getLookupData();
     const meuEmail = normalizeEmail(typeof getUserEmail === "function" ? getUserEmail() : null);
 
-    // Resumo rápido + atividade recente: preenchidos em paralelo, não bloqueiam a lista de ordens.
+    // Resumo rápido + atividade recente: buscados da própria planilha (Registro
+    // de Inventario, ordenado pela coluna "Gravado em" — a AF), não da fila local
+    // deste aparelho. Antes usava a fila local e por isso "sumia" toda vez que
+    // trocava de aparelho ou o app era reaberto sem nada pendente; agora reflete
+    // o que foi realmente gravado, de qualquer aparelho.
     (async () => {
-      const [fila, pendentes] = await Promise.all([queueAll(), queuePending()]);
-      const hojeStr = new Date().toDateString();
-      const lancadosHoje = fila.filter((f) => new Date(f.createdAt).toDateString() === hojeStr).length;
+      const pendentes = await queuePending();
+      container.querySelector("#resumo-fila").textContent = pendentes.length;
+
+      let registro = [];
+      try {
+        registro = await readTable(TABLES.registroInventario);
+      } catch (e) {
+        console.warn("Falha ao buscar Registro de Inventario pra Atividade recente:", e);
+      }
+      const comData = registro
+        .filter((r) => r["Gravado em"])
+        .sort((a, b) => Number(b["Gravado em"]) - Number(a["Gravado em"]));
+
+      const hojeSerial = toExcelSerial(new Date());
+      const lancadosHoje = comData.filter((r) => Math.floor(Number(r["Gravado em"])) === hojeSerial).length;
       const estoqueBaixo = (produtos || []).filter(
         (p) => p["Produto"] && Number(p["Estoque"]) <= Number(p["Estoque Minimo"] || 0)
       ).length;
       container.querySelector("#resumo-hoje").textContent = lancadosHoje;
       container.querySelector("#resumo-estoque").textContent = estoqueBaixo;
-      container.querySelector("#resumo-fila").textContent = pendentes.length;
 
       const atividadeList = container.querySelector("#atividade-recente-list");
-      const recentes = fila.slice(0, 4); // queueAll() já vem ordenado do mais novo pro mais antigo
+      const recentes = comData.slice(0, 4);
       if (recentes.length === 0) {
         atividadeList.innerHTML = `<div class="empty-state">Nenhum apontamento lançado ainda.</div>`;
         return;
       }
-      atividadeList.innerHTML = recentes.map((item) => atividadeCardHtml(item, { estufas, meeiros })).join("");
+      atividadeList.innerHTML = recentes.map((row) => atividadeCardHtml(row)).join("");
     })();
 
     const minhas = ordens
@@ -124,58 +139,39 @@ const ScreenOrdens = {
   },
 };
 
-const BLOCO_INFO = {
-  Uso: { titulo: "Aplicação", icone: "🧪", cor: "atividade-icone-verde" },
-  Ferti: { titulo: "Fertirrigação", icone: "💧", cor: "atividade-icone-verde" },
-  Venda: { titulo: "Venda", icone: "💰", cor: "atividade-icone-azul" },
-  Compra: { titulo: "Compra", icone: "🛒", cor: "atividade-icone-terracota" },
+// "Tipo Movimentação" na planilha: S = saída (Uso ou Ferti — a planilha não
+// distingue os dois nessa coluna), V = venda, E = entrada/compra.
+const TIPO_MOVIMENTACAO_INFO = {
+  S: { icone: "🧪", cor: "atividade-icone-verde" },
+  V: { icone: "💰", cor: "atividade-icone-azul" },
+  E: { icone: "🛒", cor: "atividade-icone-terracota" },
 };
 
 function formatMoeda(valor) {
   return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-// Card de "Atividade recente" a partir de um item local da fila (o que foi
-// lançado neste aparelho — não é um feed de outros usuários). Mostra o produto
-// usado e o total (quantidade aplicada, ou valor gasto/vendido) além do resumo.
-function atividadeCardHtml(item, lookups) {
-  const f = item.fields || {};
-  const bloco = f["Bloco"];
-  const info = BLOCO_INFO[bloco] || { titulo: bloco || "Apontamento", icone: "📋", cor: "atividade-icone-verde" };
-  const produtoNome = f["Produto"] || "—";
+// Card de "Atividade recente" a partir de uma linha real do Registro de
+// Inventario (não da fila local) — reflete o que foi gravado por qualquer
+// aparelho, ordenado pela coluna "Gravado em" (AF).
+function atividadeCardHtml(row) {
+  const tipo = row["Tipo Movimentação"];
+  const info = TIPO_MOVIMENTACAO_INFO[tipo] || { icone: "📋", cor: "atividade-icone-verde" };
+  const isCompra = tipo === "E";
+  const produtoNome = row["Descricao"] || "—";
+  const complemento = isCompra ? produtoNome : row["Estufa"] || "";
+  const pessoa = isCompra ? row["Fornecedor"] || "" : row["Meeiro"] || "";
 
-  let complemento;
-  if (bloco === "Compra") {
-    complemento = produtoNome;
-  } else {
-    const estufa = (lookups.estufas || []).find((e) => String(e.__cod) === String(f["Código Estufa"]));
-    complemento = estufa ? estufa["Estufa"] : produtoNome;
-  }
-
-  let pessoa;
-  if (bloco === "Compra") {
-    pessoa = f["Fornecedor"] || "";
-  } else {
-    const meeiro = (lookups.meeiros || []).find((m) => String(m.__cod) === String(f["Código Meeiro"]));
-    pessoa = meeiro ? meeiro["Meeiro"] : "";
-  }
-
-  // Segunda linha de detalhe: quantidade aplicada (Uso/Ferti) ou total em R$ (Venda/Compra).
   let totalLabel = null;
   let totalValor = null;
-  if (bloco === "Uso") {
+  if (tipo === "S") {
     totalLabel = "Qtde. aplicada";
-    totalValor = `${Number(f["Quantidade"]) || 0} L`;
-  } else if (bloco === "Ferti") {
-    const totalSetores = SETOR_FIELDS.reduce((soma, campo) => soma + (Number(f[campo]) || 0), 0);
-    totalLabel = "Qtde. aplicada";
-    totalValor = `${totalSetores} L`;
-  } else if (bloco === "Venda") {
-    const total = (Number(f["Quantidade"]) || 0) * (Number(f["Valor Unitário"]) || 0);
+    totalValor = `${Number(row["Volume Calda"]) || 0} L`;
+  } else if (tipo === "V") {
     totalLabel = "Total da venda";
-    totalValor = formatMoeda(total);
-  } else if (bloco === "Compra") {
-    const total = (Number(f["Quantidade"]) || 0) * (Number(f["Valor Unitário"]) || 0);
+    totalValor = formatMoeda(row["Total Venda"]);
+  } else if (tipo === "E") {
+    const total = (Number(row["Qtde."]) || 0) * (Number(row["Valor Entrada"]) || 0);
     totalLabel = "Total gasto";
     totalValor = formatMoeda(total);
   }
@@ -185,18 +181,29 @@ function atividadeCardHtml(item, lookups) {
       <div class="atividade-card-topo">
         <div class="atividade-icone ${info.cor}">${info.icone}</div>
         <div style="flex:1; min-width:0;">
-          <div class="card-title">${escapeHtml(info.titulo)}${complemento ? " — " + escapeHtml(complemento) : ""}</div>
-          <div class="card-sub">${[pessoa, formatRelativeTime(item.createdAt)].filter(Boolean).join(" · ")}</div>
+          <div class="card-title">${escapeHtml(row["Operação"] || "Apontamento")}${complemento ? " — " + escapeHtml(complemento) : ""}</div>
+          <div class="card-sub">${[pessoa, formatRelativeTimeFromSerial(row["Gravado em"])].filter(Boolean).join(" · ")}</div>
         </div>
       </div>
-      ${bloco !== "Compra" ? `<div class="card-row"><span>Produto</span><span>${escapeHtml(produtoNome)}</span></div>` : ""}
+      ${!isCompra ? `<div class="card-row"><span>Produto</span><span>${escapeHtml(produtoNome)}</span></div>` : ""}
       ${totalLabel ? `<div class="card-row"><span>${totalLabel}</span><span>${escapeHtml(totalValor)}</span></div>` : ""}
     </div>`;
 }
 
-function formatRelativeTime(isoString) {
-  if (!isoString) return "";
-  const diffMs = Date.now() - new Date(isoString).getTime();
+// "Gravado em" é um serial Excel de data+hora, gravado a partir do horário
+// LOCAL tratado como se fosse UTC (ver toExcelSerialDateTime em apontamento.js)
+// — então pra calcular "há quanto tempo" comparamos no mesmo "fuso fake",
+// senão o cálculo fica errado pelo deslocamento do fuso horário.
+function formatRelativeTimeFromSerial(serial) {
+  if (!serial) return "";
+  const excelEpocaMs = Date.UTC(1899, 11, 30);
+  const momentoMs = excelEpocaMs + Number(serial) * 86400000;
+  const agora = new Date();
+  const agoraFakeMs = Date.UTC(
+    agora.getFullYear(), agora.getMonth(), agora.getDate(),
+    agora.getHours(), agora.getMinutes(), agora.getSeconds()
+  );
+  const diffMs = agoraFakeMs - momentoMs;
   const min = Math.floor(diffMs / 60000);
   if (min < 1) return "agora";
   if (min < 60) return `há ${min} min`;
