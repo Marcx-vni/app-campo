@@ -95,16 +95,46 @@ async function graphFetch(path, options = {}, _tentativa = 1) {
   return res.json();
 }
 
+// Como graphFetch, mas pra uma URL absoluta já pronta (usado pro @odata.nextLink
+// de paginação, que já vem com o host/caminho completo — não dá pra montar de
+// novo com workbookBase() + path).
+async function graphFetchAbsolute(url, _tentativa = 1) {
+  const token = await getAccessToken();
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    if (GRAPH_RETRYABLE_STATUS.has(res.status) && _tentativa < 3) {
+      await new Promise((r) => setTimeout(r, 1500 * _tentativa));
+      return graphFetchAbsolute(url, _tentativa + 1);
+    }
+    throw new Error(`Graph API ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
 // --- Leitura de tabelas -----------------------------------------------------
 
-// Retorna as linhas de uma tabela como array de objetos {ColunaHeader: valor}
+// Retorna as linhas de uma tabela como array de objetos {ColunaHeader: valor}.
+// Tabelas grandes (ex.: Registro de Inventario, que só cresce) vêm paginadas
+// pelo Graph — sem seguir o @odata.nextLink, só a primeira página voltava, e
+// como a ordem não é garantida ser cronológica, dava pra faltar lançamentos
+// recentes na "Atividade recente" mesmo eles existindo na planilha.
 async function readTable(tableName) {
-  const [headerRes, rowsRes] = await Promise.all([
+  const [headerRes, primeiraPagina] = await Promise.all([
     graphFetch(`/tables('${tableName}')/headerRowRange`),
     graphFetch(`/tables('${tableName}')/rows`),
   ]);
   const headers = headerRes.values[0];
-  return rowsRes.value.map((row) => {
+
+  let rows = primeiraPagina.value.slice();
+  let proximaPagina = primeiraPagina["@odata.nextLink"];
+  while (proximaPagina) {
+    const pagina = await graphFetchAbsolute(proximaPagina);
+    rows = rows.concat(pagina.value);
+    proximaPagina = pagina["@odata.nextLink"];
+  }
+
+  return rows.map((row) => {
     const obj = { __rowIndex: row.index };
     headers.forEach((h, i) => (obj[h] = row.values[0][i]));
     return obj;
