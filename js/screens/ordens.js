@@ -35,6 +35,10 @@ const ScreenOrdens = {
           <div class="resumo-valor" id="resumo-fila">—</div>
           <div class="resumo-label">Fila de sync</div>
         </div>
+        <div class="resumo-card">
+          <div class="resumo-valor resumo-valor-pequeno" id="resumo-valor-estoque">—</div>
+          <div class="resumo-label">Valor em estoque</div>
+        </div>
       </div>
 
       <div class="section-title" style="margin-top:18px;">Ações rápidas</div>
@@ -93,6 +97,15 @@ const ScreenOrdens = {
       ).length;
       container.querySelector("#resumo-hoje").textContent = lancadosHoje;
       container.querySelector("#resumo-estoque").textContent = estoqueBaixo;
+
+      const valorKeyEstoque = acharChaveValorEstoque(produtos || []);
+      const valorEstoqueEl = container.querySelector("#resumo-valor-estoque");
+      if (valorKeyEstoque) {
+        const total = (produtos || []).reduce((soma, p) => soma + (Number(p[valorKeyEstoque]) || 0), 0);
+        valorEstoqueEl.textContent = formatMoeda(total);
+      } else {
+        valorEstoqueEl.textContent = "—";
+      }
 
       const atividadeList = container.querySelector("#atividade-recente-list");
       const recentes = comData.slice(0, 4);
