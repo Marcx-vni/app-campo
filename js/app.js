@@ -34,6 +34,12 @@ function showToast(message, ms = 2800) {
   setTimeout(() => el.remove(), ms);
 }
 
+function atualizarLabelArquivo() {
+  const el = document.getElementById("arquivo-atual");
+  const arquivo = typeof getSelectedFile === "function" ? getSelectedFile() : null;
+  el.textContent = arquivo ? `Arquivo: ${arquivo.name}` : "";
+}
+
 async function updateSyncIndicator() {
   const badge = document.getElementById("sync-indicator");
   const pending = await queuePending();
@@ -55,6 +61,7 @@ async function bootApp() {
   document.getElementById("user-name").textContent = getUserDisplayName();
   document.getElementById("screen-login").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
+  atualizarLabelArquivo();
 
   // Primeira abertura neste aparelho: pede para escolher o arquivo antes de continuar.
   if (!getSelectedFile()) {
@@ -113,6 +120,15 @@ document.getElementById("btn-login").addEventListener("click", async () => {
 });
 
 document.getElementById("btn-logout").addEventListener("click", () => logout());
+
+// Força esquecer o arquivo do OneDrive selecionado neste aparelho e escolher de novo
+// (útil se em algum teste anterior o app ficou "preso" gravando no arquivo errado).
+document.getElementById("btn-trocar-arquivo").addEventListener("click", () => {
+  if (confirm("Isso vai esquecer o arquivo do OneDrive selecionado neste aparelho e pedir para escolher de novo. Continuar?")) {
+    clearSelectedFile();
+    location.reload();
+  }
+});
 
 (async function init() {
   if ("serviceWorker" in navigator) {
