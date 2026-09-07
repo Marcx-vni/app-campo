@@ -58,7 +58,7 @@ const ScreenApontamentoLivre = {
       .map((f) => `<option value="${escapeHtml(f["Fornecedor"])}">${escapeHtml(f["Fornecedor"])}</option>`)
       .join("");
     const clienteOptions = (lookups.clientes || [])
-      .map((c) => `<option value="${escapeHtml(Object.values(c)[0])}">${escapeHtml(Object.values(c)[0])}</option>`)
+      .map((c) => `<option value="${escapeHtml(c["Cliente"])}">${escapeHtml(c["Cliente"])}</option>`)
       .join("");
 
     const today = new Date().toISOString().slice(0, 10);

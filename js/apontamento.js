@@ -53,10 +53,17 @@ function toExcelSerial(dateInput) {
   return Math.round((utcDate - excelEpoch) / 86400000);
 }
 
-// Como acima, mas preservando a hora (usado em "Gravado em").
+// Como acima, mas preservando a hora (usado em "Gravado em"). Usa os campos
+// LOCAIS da data (getFullYear/getHours/...), não o instante UTC absoluto —
+// senão o horário gravado fica ~3h à frente do horário do Brasil (o Excel
+// não guarda fuso horário, só o número "de fachada" que se vê na tela).
 function toExcelSerialDateTime(date) {
   const excelEpoch = Date.UTC(1899, 11, 30);
-  return (date.getTime() - excelEpoch) / 86400000;
+  const comoSeFosseUTC = Date.UTC(
+    date.getFullYear(), date.getMonth(), date.getDate(),
+    date.getHours(), date.getMinutes(), date.getSeconds()
+  );
+  return (comoSeFosseUTC - excelEpoch) / 86400000;
 }
 
 // Campos obrigatórios por bloco (entrada do usuário, antes de qualquer cálculo).
@@ -253,7 +260,7 @@ function prepararRegistro(fields, lookups, seq, usuario) {
     const totalVenda = quantidade * valorUnitario;
     const vendaLiquida = valorEmbalagem > 0 ? totalVenda - quantidade * valorEmbalagem : totalVenda;
     Object.assign(inventario, {
-      "Tipo Movimentação": "S",
+      "Tipo Movimentação": "V",
       "Código Estufa": fields["Código Estufa"],
       "Estufa": estufaNome,
       "Código Meeiro": fields["Código Meeiro"],
