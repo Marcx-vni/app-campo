@@ -23,7 +23,19 @@ const ScreenEstoque = {
     const grupoLabel = container.querySelector("#estoque-grupo-label");
     const input = container.querySelector("#busca-produto");
 
-    const GRUPO_KEY = " "; // cabeçalho da coluna D vem em branco na planilha
+    // A coluna "Grupo" (D) às vezes vem com o cabeçalho em branco na planilha
+    // — tenta achar pelo nome (Grupo/Categoria); se não achar (cabeçalho
+    // vazio mesmo), cai pra posição da coluna D (índice 3, A=0) da própria
+    // tabela, que é mais confiável do que chutar um texto fixo pra chave.
+    const acharChaveGrupo = () => {
+      const headers = produtos.headers || [];
+      const porNome = headers.find((h) => ["grupo", "categoria"].includes(normKey(h)));
+      if (porNome !== undefined) return porNome;
+      if (headers.length > 3) return headers[3];
+      return " ";
+    };
+    const GRUPO_KEY = acharChaveGrupo();
+
     const abaixoDoMinimo = (p) => Number(p["Estoque"]) <= Number(p["Estoque Minimo"] || 0);
     const temSaldo = (p) => Number(p["Estoque"]) > 0;
     const nomeGrupo = (p) => (p[GRUPO_KEY] && String(p[GRUPO_KEY]).trim()) || "Sem categoria";

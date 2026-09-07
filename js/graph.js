@@ -134,11 +134,17 @@ async function readTable(tableName) {
     proximaPagina = pagina["@odata.nextLink"];
   }
 
-  return rows.map((row) => {
+  const mapeadas = rows.map((row) => {
     const obj = { __rowIndex: row.index };
     headers.forEach((h, i) => (obj[h] = row.values[0][i]));
     return obj;
   });
+  // Guarda a lista de cabeçalhos na própria lista (propriedade extra num array
+  // não atrapalha .map/.filter/.forEach) — usado quando uma coluna importante
+  // vem com o cabeçalho em branco na planilha e precisamos achá-la pela
+  // POSIÇÃO (ex.: "coluna D") em vez de pelo nome exato do cabeçalho.
+  mapeadas.headers = headers;
+  return mapeadas;
 }
 
 // Lê uma única linha pelo índice (usado para reler AF/AE depois de gravar)
