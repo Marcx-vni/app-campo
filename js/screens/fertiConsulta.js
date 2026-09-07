@@ -19,6 +19,7 @@ const ScreenFertiConsulta = {
         <input type="search" id="busca-ferti" placeholder="Buscar por estufa, meeiro ou produto..." />
       </div>
       <div class="ferti-filtros">
+        <select id="filtro-estufa"><option value="">Todas as estufas</option></select>
         <select id="filtro-meeiro"><option value="">Todos os meeiros</option></select>
         <div class="ferti-filtros-datas">
           <input type="date" id="filtro-data-de" />
@@ -31,6 +32,7 @@ const ScreenFertiConsulta = {
         <div id="btn-agrupar-toggle" class="link-acao">🔗 Agrupar por estufa e enviar</div>
         <div id="ferti-agrupar-selecao" class="ferti-agrupar-selecao" hidden>
           <span id="ferti-agrupar-contagem">0 selecionados</span>
+          <div id="btn-agrupar-marcar-tudo" class="link-acao">Marcar tudo</div>
           <button type="button" id="btn-agrupar-enviar" class="btn-compartilhar btn-compartilhar-inline">📲 Enviar agrupado</button>
           <div id="btn-agrupar-cancelar" class="link-acao">Cancelar</div>
         </div>
@@ -40,6 +42,7 @@ const ScreenFertiConsulta = {
 
     const list = container.querySelector("#ferti-consulta-list");
     const input = container.querySelector("#busca-ferti");
+    const estufaSelect = container.querySelector("#filtro-estufa");
     const meeiroSelect = container.querySelector("#filtro-meeiro");
     const dataDeInput = container.querySelector("#filtro-data-de");
     const dataAteInput = container.querySelector("#filtro-data-ate");
@@ -49,9 +52,13 @@ const ScreenFertiConsulta = {
 
     // Estado da seleção pra agrupar — só existe enquanto "modo agrupar" está
     // ativo. Guardado fora do renderList pra sobreviver a um re-render
-    // causado pelos filtros (busca/meeiro/data) enquanto a pessoa seleciona.
+    // causado pelos filtros (busca/estufa/meeiro/data) enquanto a pessoa
+    // seleciona. `ultimosFiltrados` guarda o resultado do último renderList,
+    // pra "Marcar tudo" saber exatamente quais cards estão visíveis agora
+    // (sem recalcular o filtro de novo).
     let modoAgrupar = false;
     const selecionados = new Set();
+    let ultimosFiltrados = [];
 
     let registros = [];
     try {
@@ -118,8 +125,15 @@ const ScreenFertiConsulta = {
         </div>`;
     };
 
-    // Lista de meeiros pra popular o filtro — só os que realmente aparecem
-    // no histórico de Ferti, em ordem alfabética.
+    // Lista de estufas/meeiros pra popular os filtros — só os que realmente
+    // aparecem no histórico de Ferti, em ordem alfabética.
+    const estufas = [...new Set(ordenados.map((r) => r["Estufa"]).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "pt-BR")
+    );
+    estufaSelect.innerHTML =
+      `<option value="">Todas as estufas</option>` +
+      estufas.map((e) => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join("");
+
     const meeiros = [...new Set(ordenados.map((r) => r["Meeiro"]).filter(Boolean))].sort((a, b) =>
       a.localeCompare(b, "pt-BR")
     );
@@ -127,15 +141,18 @@ const ScreenFertiConsulta = {
       `<option value="">Todos os meeiros</option>` +
       meeiros.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
 
-    // Combina busca por texto + meeiro + intervalo de datas — os três filtros
-    // funcionam juntos (ex.: meeiro X entre duas datas), não um de cada vez.
+    // Combina busca por texto + estufa + meeiro + intervalo de datas — os
+    // filtros funcionam juntos (ex.: estufa X + meeiro Y numa data), não um
+    // de cada vez.
     const renderList = () => {
       const termo = input.value.trim().toLowerCase();
+      const estufaFiltro = estufaSelect.value;
       const meeiroFiltro = meeiroSelect.value;
       const serialDe = dataDeInput.value ? toExcelSerial(dataDeInput.value) : null;
       const serialAte = dataAteInput.value ? toExcelSerial(dataAteInput.value) : null;
 
       const filtrados = ordenados.filter((r) => {
+        if (estufaFiltro && r["Estufa"] !== estufaFiltro) return false;
         if (meeiroFiltro && r["Meeiro"] !== meeiroFiltro) return false;
         const dataSerial = r["Data"] !== undefined && r["Data"] !== null && r["Data"] !== "" ? Number(r["Data"]) : null;
         if (serialDe !== null && (dataSerial === null || dataSerial < serialDe)) return false;
@@ -144,6 +161,7 @@ const ScreenFertiConsulta = {
           return false;
         return true;
       });
+      ultimosFiltrados = filtrados;
 
       if (filtrados.length === 0) {
         list.innerHTML = `<div class="empty-state">Nenhuma fertirrigação encontrada com esse filtro.</div>`;
@@ -184,6 +202,15 @@ const ScreenFertiConsulta = {
       toggleBtn.click();
     });
 
+    // Marca todos os cards que estão visíveis AGORA (respeitando os filtros
+    // de estufa/meeiro/data/busca) — evita ter que marcar card por card
+    // quando já filtrou pela estufa que quer agrupar.
+    container.querySelector("#btn-agrupar-marcar-tudo").addEventListener("click", () => {
+      ultimosFiltrados.forEach((r) => selecionados.add(String(r.__rowIndex)));
+      atualizarContagemSelecao();
+      renderList();
+    });
+
     container.querySelector("#btn-agrupar-enviar").addEventListener("click", () => {
       if (selecionados.size === 0) {
         showToast("Selecione ao menos um lançamento pra agrupar.");
@@ -201,12 +228,13 @@ const ScreenFertiConsulta = {
       compartilharTexto(montarTextoWhatsAppFertiAgrupado(escolhidos));
     });
 
-    [input, meeiroSelect, dataDeInput, dataAteInput].forEach((el) => {
+    [input, estufaSelect, meeiroSelect, dataDeInput, dataAteInput].forEach((el) => {
       el.addEventListener("input", renderList);
       el.addEventListener("change", renderList);
     });
     container.querySelector("#ferti-limpar-filtros").addEventListener("click", () => {
       input.value = "";
+      estufaSelect.value = "";
       meeiroSelect.value = "";
       dataDeInput.value = "";
       dataAteInput.value = "";
