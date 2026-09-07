@@ -130,6 +130,11 @@ function validateBeforeSend(fields, lookups) {
     const encontrado =
       bloco === "Venda" ? achar(lookups.produtosVenda, "Tipo", fields["Produto"]) : achar(lookups.produtos, "Produto", fields["Produto"]);
     if (!encontrado) return "Produto inexistente";
+    // Uso consome do estoque físico do insumo — sem saldo, não faz sentido
+    // deixar lançar (a planilha ficaria negativa sem o usuário perceber na hora).
+    if (bloco === "Uso" && Number(encontrado["Estoque"]) <= 0) {
+      return `${fields["Produto"]} está sem estoque disponível`;
+    }
   }
   if (fields["Operação"] && bloco !== "Venda" && !achar(lookups.operacoes, "Operação", fields["Operação"])) {
     return "Operação inexistente";

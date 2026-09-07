@@ -455,3 +455,39 @@ textarea { resize: vertical; min-height: 60px; }
   color: var(--muted);
   margin: 4px 0 8px;
 }
+
+/* --- Estoque: acordeão por grupo (coluna D da planilha) --- */
+.estoque-grupo {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.estoque-grupo-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  cursor: pointer;
+}
+.estoque-grupo-icone {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--gray-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+.estoque-grupo-titulo { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--text); }
+.estoque-grupo-valor { flex-shrink: 0; font-size: 12.5px; color: var(--muted); text-align: right; }
+.estoque-grupo-seta { flex-shrink: 0; font-size: 12px; color: var(--muted); transition: transform 0.15s ease; }
+.estoque-grupo.aberto .estoque-grupo-seta { transform: rotate(90deg); }
+.estoque-grupo-body { display: none; padding: 0 10px 10px; }
+.estoque-grupo.aberto .estoque-grupo-body { display: block; }
+.estoque-grupo-body .estoque-item { margin-bottom: 6px; }
+.estoque-grupo-body .estoque-item:last-child { margin-bottom: 0; }
+.estoque-grupo-vazio { font-size: 12.5px; color: var(--muted); padding: 2px 4px 4px; }
