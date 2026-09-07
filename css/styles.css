@@ -90,6 +90,7 @@ html, body {
   font-size: 12px;
   color: rgba(255,255,255,0.72);
   margin-top: 2px;
+  cursor: pointer;
 }
 .icon-btn {
   background: none; border: none; color: white; font-size: 20px; cursor: pointer;
@@ -205,6 +206,23 @@ html, body {
 .acao-rapida-texto { font-size: 12.5px; font-weight: 600; color: var(--text); }
 .acao-rapida-primaria { background: var(--verde); border-color: var(--verde); }
 .acao-rapida-primaria .acao-rapida-texto { color: white; }
+
+/* --- Atividade recente (cards com ícone, na tela Ordens) --- */
+.atividade-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.atividade-card .card-title, .atividade-card .card-sub { margin-bottom: 0; }
+.atividade-icone {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.atividade-icone-verde { background: #D6E8D6; }
+.atividade-icone-azul { background: #DCE6F5; }
+.atividade-icone-terracota { background: #F5E4DD; }
 
 /* --- Card de ordem com ícone (Minhas Ordens) --- */
 .ordem-card-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }

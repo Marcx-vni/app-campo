@@ -49,6 +49,12 @@ const ScreenOrdens = {
         </div>
       </div>
 
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;margin-bottom:10px;">
+        <div class="section-title" style="margin:0;">Atividade recente</div>
+        <div id="atividade-ver-tudo" style="font-size:12px;color:var(--verde);font-weight:500;cursor:pointer;">Ver tudo</div>
+      </div>
+      <div id="atividade-recente-list"></div>
+
       <h2 class="page-title" style="margin-top:22px;">Minhas Ordens</h2>
       <div id="ordens-list">Carregando...</div>
     `;
@@ -56,11 +62,12 @@ const ScreenOrdens = {
     container.querySelectorAll(".acao-rapida").forEach((el) => {
       el.addEventListener("click", () => navigate(el.dataset.route));
     });
+    container.querySelector("#atividade-ver-tudo").addEventListener("click", () => navigate("fila"));
 
-    const { ordens, produtos } = await getLookupData();
+    const { ordens, produtos, estufas, meeiros } = await getLookupData();
     const meuEmail = normalizeEmail(typeof getUserEmail === "function" ? getUserEmail() : null);
 
-    // Resumo rápido: preenchido em paralelo, não bloqueia a lista de ordens.
+    // Resumo rápido + atividade recente: preenchidos em paralelo, não bloqueiam a lista de ordens.
     (async () => {
       const [fila, pendentes] = await Promise.all([queueAll(), queuePending()]);
       const hojeStr = new Date().toDateString();
@@ -71,6 +78,14 @@ const ScreenOrdens = {
       container.querySelector("#resumo-hoje").textContent = lancadosHoje;
       container.querySelector("#resumo-estoque").textContent = estoqueBaixo;
       container.querySelector("#resumo-fila").textContent = pendentes.length;
+
+      const atividadeList = container.querySelector("#atividade-recente-list");
+      const recentes = fila.slice(0, 4); // queueAll() já vem ordenado do mais novo pro mais antigo
+      if (recentes.length === 0) {
+        atividadeList.innerHTML = `<div class="empty-state">Nenhum apontamento lançado ainda.</div>`;
+        return;
+      }
+      atividadeList.innerHTML = recentes.map((item) => atividadeCardHtml(item, { estufas, meeiros })).join("");
     })();
 
     const minhas = ordens
@@ -108,6 +123,57 @@ const ScreenOrdens = {
     });
   },
 };
+
+const BLOCO_INFO = {
+  Uso: { titulo: "Aplicação", icone: "🧪", cor: "atividade-icone-verde" },
+  Ferti: { titulo: "Fertirrigação", icone: "💧", cor: "atividade-icone-verde" },
+  Venda: { titulo: "Venda", icone: "💰", cor: "atividade-icone-azul" },
+  Compra: { titulo: "Compra", icone: "🛒", cor: "atividade-icone-terracota" },
+};
+
+// Card de "Atividade recente" a partir de um item local da fila (o que foi
+// lançado neste aparelho — não é um feed de outros usuários).
+function atividadeCardHtml(item, lookups) {
+  const bloco = item.fields?.["Bloco"];
+  const info = BLOCO_INFO[bloco] || { titulo: bloco || "Apontamento", icone: "📋", cor: "atividade-icone-verde" };
+
+  let complemento;
+  if (bloco === "Compra") {
+    complemento = item.fields?.["Produto"] || "";
+  } else {
+    const estufa = (lookups.estufas || []).find((e) => String(e.__cod) === String(item.fields?.["Código Estufa"]));
+    complemento = estufa ? estufa["Estufa"] : item.fields?.["Produto"] || "";
+  }
+
+  let pessoa;
+  if (bloco === "Compra") {
+    pessoa = item.fields?.["Fornecedor"] || "";
+  } else {
+    const meeiro = (lookups.meeiros || []).find((m) => String(m.__cod) === String(item.fields?.["Código Meeiro"]));
+    pessoa = meeiro ? meeiro["Meeiro"] : "";
+  }
+
+  return `
+    <div class="card atividade-card">
+      <div class="atividade-icone ${info.cor}">${info.icone}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="card-title">${escapeHtml(info.titulo)}${complemento ? " — " + escapeHtml(complemento) : ""}</div>
+        <div class="card-sub">${[pessoa, formatRelativeTime(item.createdAt)].filter(Boolean).join(" · ")}</div>
+      </div>
+    </div>`;
+}
+
+function formatRelativeTime(isoString) {
+  if (!isoString) return "";
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  return `há ${d}d`;
+}
 
 function isAtrasada(excelSerialDate) {
   if (!excelSerialDate) return false;

@@ -123,7 +123,9 @@ document.getElementById("btn-logout").addEventListener("click", () => logout());
 
 // Força esquecer o arquivo do OneDrive selecionado neste aparelho e escolher de novo
 // (útil se em algum teste anterior o app ficou "preso" gravando no arquivo errado).
-document.getElementById("btn-trocar-arquivo").addEventListener("click", () => {
+// Sem ícone dedicado no cabeçalho — é um toque no próprio nome do arquivo.
+document.getElementById("arquivo-atual").addEventListener("click", () => {
+  if (!getSelectedFile()) return;
   if (confirm("Isso vai esquecer o arquivo do OneDrive selecionado neste aparelho e pedir para escolher de novo. Continuar?")) {
     clearSelectedFile();
     location.reload();
