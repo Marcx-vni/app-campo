@@ -216,8 +216,8 @@ function prepararDadosCardFerti(fertiRows) {
   };
 }
 
-// Corta o texto com "…" se não couber na largura disponível — evita nome de
-// produto comprido invadindo a coluna vizinha na imagem gerada.
+// Corta o texto com "…" se não couber na largura disponível — usado como
+// último recurso depois de já ter tentado quebrar em mais de uma linha.
 function truncarTextoCanvas(ctx, texto, larguraMax) {
   if (ctx.measureText(texto).width <= larguraMax) return texto;
   let t = texto;
@@ -225,6 +225,37 @@ function truncarTextoCanvas(ctx, texto, larguraMax) {
     t = t.slice(0, -1);
   }
   return t + "…";
+}
+
+// Quebra o texto em até `maxLinhas` linhas que cabem em `larguraMax` (por
+// palavra inteira, como um texto normal quebraria) — evita cortar o nome do
+// produto de cara quando ele só é um pouco comprido demais pra uma linha só.
+// Se mesmo assim sobrar texto depois do limite de linhas, a última linha
+// termina com "…".
+function quebrarTextoCanvas(ctx, texto, larguraMax, maxLinhas) {
+  const palavras = String(texto).split(/\s+/).filter(Boolean);
+  const linhas = [];
+  let atual = "";
+  let i = 0;
+  while (i < palavras.length && linhas.length < maxLinhas) {
+    const tentativa = atual ? `${atual} ${palavras[i]}` : palavras[i];
+    if (!atual || ctx.measureText(tentativa).width <= larguraMax) {
+      atual = tentativa;
+      i++;
+    } else {
+      linhas.push(atual);
+      atual = "";
+    }
+  }
+  if (atual) linhas.push(atual);
+  if (i < palavras.length && linhas.length > 0) {
+    linhas[linhas.length - 1] = truncarTextoCanvas(
+      ctx,
+      `${linhas[linhas.length - 1]} ${palavras.slice(i).join(" ")}`,
+      larguraMax
+    );
+  }
+  return linhas.length ? linhas : [""];
 }
 
 // Gera a imagem (PNG, como Blob) do "card" de Fertirrigação pronto pra
@@ -238,16 +269,46 @@ async function gerarCardFertiPng(dados) {
   const colSetor = 104;
   const altHeader = 106;
   const altCabecalho = 44;
-  const altLinha = 48;
+  const altLinhaBase = 48;
   const altFooter = 50;
   const raio = 22;
+  const alturaLinhaTexto = 18; // espaço entre linhas quando o nome do produto quebra em 2
+  const maxLinhasProduto = 2;
 
   // Sem coluna de Total nem linha de Totais (a pedido do usuário, pra
   // aproveitar espaço) — o card mostra só o lançamento em si, produto por
   // produto e setor por setor.
   const setores = dados.setores.length ? dados.setores : [1];
-  const largura = colProduto + colSetor * setores.length;
-  const altura = altHeader + altCabecalho + altLinha * dados.produtos.length + altFooter;
+  const larguraTabela = colProduto + colSetor * setores.length;
+
+  // Canvas "de medida", só pra calcular larguras de texto e quebras de linha
+  // antes de saber o tamanho final do card (não é desenhado em lugar nenhum).
+  const medCtx = document.createElement("canvas").getContext("2d");
+
+  // O título do cabeçalho (ícone + "Fertirrigação — Estufa X") não pode ficar
+  // maior que o card — senão passa da borda e é cortado, como aconteceu numa
+  // estufa com nome curto e só 1 setor (card ficava mais estreito que o
+  // título). Se o texto do cabeçalho pedir mais espaço que a própria tabela,
+  // o card cresce até caber os dois.
+  medCtx.font = `600 21px ${fonte}`;
+  const larguraTitulo = 58 + medCtx.measureText(`Fertirrigação — ${dados.estufa}`).width + 20;
+  medCtx.font = `15px ${fonte}`;
+  const larguraSubtitulo = 22 + medCtx.measureText(`${dados.meeiro} · ${dados.dataTexto}`).width + 20;
+  const largura = Math.max(larguraTabela, larguraTitulo, larguraSubtitulo);
+
+  // Nome do produto: quebra em até 2 linhas antes de recorrer a "…" — evita
+  // cortar nomes só um pouco compridos demais pra uma linha só.
+  medCtx.font = `600 14.5px ${fonte}`;
+  const larguraProdutoDisponivel = colProduto - 30;
+  const linhasPorProduto = dados.produtos.map((p) =>
+    quebrarTextoCanvas(medCtx, p.nome, larguraProdutoDisponivel, maxLinhasProduto)
+  );
+  const alturasLinha = linhasPorProduto.map((linhas) =>
+    Math.max(altLinhaBase, linhas.length * alturaLinhaTexto + 20)
+  );
+  const alturaTabelaLinhas = alturasLinha.reduce((soma, h) => soma + h, 0);
+
+  const altura = altHeader + altCabecalho + alturaTabelaLinhas + altFooter;
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(largura * escala);
@@ -299,7 +360,11 @@ async function gerarCardFertiPng(dados) {
   y += altCabecalho;
 
   // Uma linha por produto — só os valores lançados, sem totalizador nenhum.
+  // Cada linha pode ter sua própria altura (produtos com nome maior que
+  // quebrou em 2 linhas ficam mais altos que os demais).
   dados.produtos.forEach((p, idx) => {
+    const altLinha = alturasLinha[idx];
+    const linhasNome = linhasPorProduto[idx];
     if (idx % 2 === 1) {
       ctx.fillStyle = "#FAF9F6";
       ctx.fillRect(0, y, largura, altLinha);
@@ -307,7 +372,10 @@ async function gerarCardFertiPng(dados) {
     ctx.font = `600 14.5px ${fonte}`;
     ctx.fillStyle = "#1A1A1A";
     ctx.textAlign = "left";
-    ctx.fillText(truncarTextoCanvas(ctx, p.nome, colProduto - 30), 16, y + altLinha / 2);
+    const yPrimeiraLinha = y + altLinha / 2 - ((linhasNome.length - 1) * alturaLinhaTexto) / 2;
+    linhasNome.forEach((linha, li) => {
+      ctx.fillText(linha, 16, yPrimeiraLinha + li * alturaLinhaTexto);
+    });
     ctx.font = `14.5px ${fonte}`;
     ctx.textAlign = "center";
     setores.forEach((n, i) => {
