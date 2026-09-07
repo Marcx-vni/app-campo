@@ -169,7 +169,7 @@ const ScreenFertiConsulta = {
       list.querySelectorAll(".btn-compartilhar").forEach((btn) => {
         btn.addEventListener("click", () => {
           const registro = ordenados.find((r) => String(r.__rowIndex) === btn.dataset.idx);
-          if (registro) compartilharTexto(montarTextoWhatsAppFerti(registro));
+          if (registro) enviarCardFerti([registro]);
         });
       });
       list.querySelectorAll(".ferti-select").forEach((chk) => {
@@ -226,7 +226,7 @@ const ScreenFertiConsulta = {
         showToast("Selecione lançamentos da mesma estufa e do mesmo dia pra agrupar.");
         return;
       }
-      compartilharTexto(montarTextoWhatsAppFertiAgrupado(escolhidos));
+      enviarCardFerti(escolhidos);
     });
 
     [input, estufaSelect, meeiroSelect, dataDeInput, dataAteInput].forEach((el) => {

@@ -142,7 +142,7 @@ const ScreenHome = {
       atividadeList.querySelectorAll(".btn-compartilhar").forEach((btn) => {
         btn.addEventListener("click", () => {
           const fertiRow = fertiIndex.get(btn.dataset.fertiKey);
-          if (fertiRow) compartilharTexto(montarTextoWhatsAppFerti(fertiRow));
+          if (fertiRow) enviarCardFerti([fertiRow]);
         });
       });
     })();
@@ -187,60 +187,203 @@ function chaveFerti(estufa, produto, dataSerial, meeiro) {
   return [estufa, produto, dataSerial, meeiro].map((v) => String(v ?? "").trim().toLowerCase()).join("||");
 }
 
-// Texto pronto pra compartilhar por WhatsApp — um "relatório de campo" com
-// as quantidades por setor, pra mandar direto pro meeiro que vai aplicar.
-function montarTextoWhatsAppFerti(fertiRow) {
-  // Arredondado pra centena de grama (a pedido do usuário) — lançamentos
-  // novos já são gravados assim; isso também arredonda lançamentos antigos
-  // que ainda tenham valor "quebrado", pra manter o recado sempre redondo.
-  const setores = [1, 2, 3, 4, 5, 6]
-    .map((n) => ({ n, v: arredondarGramasFerti(fertiRow[`Setor ${n}`]) }))
-    .filter((s) => s.v > 0);
-  const total = setores.reduce((soma, s) => soma + s.v, 0);
-  // Dosagem e D.A.T ficaram de fora do texto a pedido do usuário — são
-  // informação de controle interno, e misturadas ao recado do meeiro só
-  // confundiam (ele só precisa saber quanto pesar em cada setor).
-  const linhasSetor = setores.map((s) => `Setor ${s.n}- ${formatNumero(s.v)} gramas`).join("\n");
-  return (
-    `🧪 *Fertirrigação — ${fertiRow["Estufa"] || "—"}*\n` +
-    `📅 ${formatExcelDate(fertiRow["Data"])}\n` +
-    `👤 Meeiro: ${fertiRow["Meeiro"] || "—"}\n` +
-    `🌱 Produto: ${fertiRow["Produto"] || "—"}\n\n` +
-    `${linhasSetor}\n\n` +
-    `*Total todos os setores - ${formatNumero(total)} gramas*`
-  );
+// Monta os dados de UM OU MAIS lançamentos de Ferti (mesma estufa/dia) no
+// formato que o "card" de imagem (gerarCardFertiPng) precisa: uma tabela com
+// uma linha por produto e uma coluna por setor. Usado tanto pro envio
+// individual (1 produto) quanto pro agrupado (vários produtos).
+function prepararDadosCardFerti(fertiRows) {
+  const primeiro = fertiRows[0];
+  const produtos = fertiRows.map((r) => {
+    const porSetor = {};
+    let total = 0;
+    [1, 2, 3, 4, 5, 6].forEach((n) => {
+      const v = arredondarGramasFerti(r[`Setor ${n}`]);
+      if (v > 0) {
+        porSetor[n] = v;
+        total += v;
+      }
+    });
+    return { nome: r["Produto"] || "—", porSetor, total };
+  });
+  const setoresSet = new Set();
+  produtos.forEach((p) => Object.keys(p.porSetor).forEach((n) => setoresSet.add(Number(n))));
+  return {
+    estufa: primeiro["Estufa"] || "—",
+    meeiro: primeiro["Meeiro"] || "—",
+    dataTexto: formatExcelDate(primeiro["Data"]),
+    produtos,
+    setores: [...setoresSet].sort((a, b) => a - b),
+  };
 }
 
-// Igual a montarTextoWhatsAppFerti, mas pra vários produtos da MESMA estufa
-// (e mesmo dia) num recado só — cabeçalho (estufa/data/meeiro) uma vez só,
-// um bloco "🌱 Produto" por lançamento, cada um com sua própria lista de
-// setor e total. Usado pela Consulta de Fertirrigações ("Agrupar por
-// estufa"), quando a mesma estufa leva mais de um produto no mesmo dia.
-function montarTextoWhatsAppFertiAgrupado(fertiRows) {
-  if (!fertiRows || fertiRows.length === 0) return "";
-  const primeiro = fertiRows[0];
-  const blocos = fertiRows.map((fertiRow) => {
-    const setores = [1, 2, 3, 4, 5, 6]
-      .map((n) => ({ n, v: arredondarGramasFerti(fertiRow[`Setor ${n}`]) }))
-      .filter((s) => s.v > 0);
-    const total = setores.reduce((soma, s) => soma + s.v, 0);
-    const linhasSetor = setores.map((s) => `Setor ${s.n}- ${formatNumero(s.v)} gramas`).join("\n");
-    // Primeira palavra do produto como rótulo curto do total (ex.: "KRISTALON
-    // 06-12-36" -> "Total KRISTALON - ..."), só pra não repetir o nome
-    // inteiro de novo em cada linha de total.
-    const nomeCurto = String(fertiRow["Produto"] || "").trim().split(/\s+/)[0] || fertiRow["Produto"] || "";
-    return (
-      `🌱 Produto: ${fertiRow["Produto"] || "—"}\n` +
-      `${linhasSetor}\n` +
-      `*Total ${nomeCurto} - ${formatNumero(total)} gramas*`
-    );
+// Corta o texto com "…" se não couber na largura disponível — evita nome de
+// produto comprido invadindo a coluna vizinha na imagem gerada.
+function truncarTextoCanvas(ctx, texto, larguraMax) {
+  if (ctx.measureText(texto).width <= larguraMax) return texto;
+  let t = texto;
+  while (t.length > 1 && ctx.measureText(t + "…").width > larguraMax) {
+    t = t.slice(0, -1);
+  }
+  return t + "…";
+}
+
+// Gera a imagem (PNG, como Blob) do "card" de Fertirrigação pronto pra
+// mandar por WhatsApp — mesmo formato de tabela usado na tela (produto ×
+// setor), só que como figura, pra evitar a confusão de leitura que o texto
+// corrido causava (ex.: "Setor 1- 1.300 gramas" sendo lido como "1 300").
+async function gerarCardFertiPng(dados) {
+  const fonte = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
+  const escala = 2;
+  const colProduto = 176;
+  const colSetor = 104;
+  const colTotal = 116;
+  const altHeader = 106;
+  const altCabecalho = 44;
+  const altLinha = 48;
+  const altFooter = 50;
+  const raio = 22;
+
+  const setores = dados.setores.length ? dados.setores : [1];
+  const largura = colProduto + colSetor * setores.length + colTotal;
+  const altura = altHeader + altCabecalho + altLinha * (dados.produtos.length + 1) + altFooter;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(largura * escala);
+  canvas.height = Math.ceil(altura * escala);
+  const ctx = canvas.getContext("2d");
+  ctx.scale(escala, escala);
+  ctx.textBaseline = "middle";
+
+  const retanguloArredondado = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+
+  ctx.save();
+  retanguloArredondado(0, 0, largura, altura, raio);
+  ctx.clip();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, largura, altura);
+
+  // Cabeçalho verde escuro — título + meeiro/data.
+  ctx.fillStyle = "#1F3D2B";
+  ctx.fillRect(0, 0, largura, altHeader);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `26px ${fonte}`;
+  ctx.textAlign = "left";
+  ctx.fillText("💧", 22, 42);
+  ctx.font = `600 21px ${fonte}`;
+  ctx.fillText(`Fertirrigação — ${dados.estufa}`, 58, 42);
+  ctx.font = `15px ${fonte}`;
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.fillText(`${dados.meeiro} · ${dados.dataTexto}`, 22, 80);
+
+  // Cabeçalho da tabela (nome das colunas).
+  let y = altHeader;
+  ctx.fillStyle = "#F7F6F2";
+  ctx.fillRect(0, y, colProduto + colSetor * setores.length, altCabecalho);
+  ctx.fillStyle = "#EFE7D6";
+  ctx.fillRect(colProduto + colSetor * setores.length, y, colTotal, altCabecalho);
+  ctx.font = `600 14px ${fonte}`;
+  ctx.fillStyle = "#3A3A34";
+  ctx.textAlign = "center";
+  setores.forEach((n, i) => {
+    const cx = colProduto + colSetor * i + colSetor / 2;
+    ctx.fillText(`Setor ${n}`, cx, y + altCabecalho / 2);
   });
-  return (
-    `🧪 *Fertirrigação — ${primeiro["Estufa"] || "—"}*\n` +
-    `📅 ${formatExcelDate(primeiro["Data"])}\n` +
-    `👤 Meeiro: ${primeiro["Meeiro"] || "—"}\n\n` +
-    blocos.join("\n\n")
+  ctx.fillText("Total", colProduto + colSetor * setores.length + colTotal / 2, y + altCabecalho / 2);
+  y += altCabecalho;
+
+  // Uma linha por produto.
+  dados.produtos.forEach((p, idx) => {
+    if (idx % 2 === 1) {
+      ctx.fillStyle = "#FAF9F6";
+      ctx.fillRect(0, y, largura, altLinha);
+    }
+    ctx.font = `600 14.5px ${fonte}`;
+    ctx.fillStyle = "#1A1A1A";
+    ctx.textAlign = "left";
+    ctx.fillText(truncarTextoCanvas(ctx, p.nome, colProduto - 30), 16, y + altLinha / 2);
+    ctx.font = `14.5px ${fonte}`;
+    ctx.textAlign = "center";
+    setores.forEach((n, i) => {
+      const v = p.porSetor[n] || 0;
+      const cx = colProduto + colSetor * i + colSetor / 2;
+      ctx.fillText(v > 0 ? `${formatNumero(v)} g` : "—", cx, y + altLinha / 2);
+    });
+    ctx.font = `600 14.5px ${fonte}`;
+    ctx.fillText(`${formatNumero(p.total)} g`, colProduto + colSetor * setores.length + colTotal / 2, y + altLinha / 2);
+    y += altLinha;
+  });
+
+  // Linha de totais, com o total geral destacado numa "pílula" verde.
+  ctx.strokeStyle = "#DAD7CC";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(14, y);
+  ctx.lineTo(largura - 14, y);
+  ctx.stroke();
+
+  ctx.font = `700 14.5px ${fonte}`;
+  ctx.fillStyle = "#1A1A1A";
+  ctx.textAlign = "left";
+  ctx.fillText("Totais", 16, y + altLinha / 2);
+  ctx.textAlign = "center";
+  setores.forEach((n, i) => {
+    const totalSetor = dados.produtos.reduce((soma, p) => soma + (p.porSetor[n] || 0), 0);
+    const cx = colProduto + colSetor * i + colSetor / 2;
+    ctx.fillText(`${formatNumero(totalSetor)} g`, cx, y + altLinha / 2);
+  });
+  const totalGeral = dados.produtos.reduce((soma, p) => soma + p.total, 0);
+  const pillX = colProduto + colSetor * setores.length + 8;
+  const pillW = colTotal - 16;
+  const pillY = y + 8;
+  const pillH = altLinha - 16;
+  ctx.fillStyle = "#1F3D2B";
+  retanguloArredondado(pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.fill();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `700 13.5px ${fonte}`;
+  ctx.fillText(`${formatNumero(totalGeral)} g`, pillX + pillW / 2, pillY + pillH / 2);
+  y += altLinha;
+
+  // Rodapé com o resumo (nº de produtos e setores).
+  ctx.fillStyle = "#F1EFE7";
+  ctx.fillRect(0, y, largura, altFooter);
+  ctx.fillStyle = "#6B6B65";
+  ctx.font = `14px ${fonte}`;
+  ctx.textAlign = "left";
+  const nProdutos = dados.produtos.length;
+  const nSetores = setores.length;
+  ctx.fillText(
+    `${nProdutos} produto${nProdutos === 1 ? "" : "s"} · ${nSetores} setor${nSetores === 1 ? "" : "es"}`,
+    16,
+    y + altFooter / 2
   );
+
+  ctx.restore();
+
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+}
+
+// Gera o card (imagem) de um ou mais lançamentos de Ferti da mesma
+// estufa/dia e compartilha — usado tanto pelo botão individual quanto pelo
+// "Enviar agrupado". Substitui o antigo envio como texto puro, que podia
+// confundir a leitura dos números (ver compartilharImagem em app.js).
+async function enviarCardFerti(fertiRows) {
+  const dados = prepararDadosCardFerti(fertiRows);
+  const blob = await gerarCardFertiPng(dados);
+  if (!blob) {
+    showToast("Não foi possível gerar a imagem do card.");
+    return;
+  }
+  const nomeArquivo = `ferti-${dados.estufa}-${dados.dataTexto}`.replace(/[^\w-]+/g, "_") + ".png";
+  await compartilharImagem(blob, nomeArquivo);
 }
 
 // Card de "Atividade recente" a partir de uma linha real do Registro de

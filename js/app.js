@@ -46,6 +46,34 @@ async function compartilharTexto(texto) {
   window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
 }
 
+// Compartilha uma imagem (o "card" de Fertirrigação gerado em Canvas, ver
+// gerarCardFertiPng em home.js) pelo menu nativo de compartilhamento —
+// mesma ideia do compartilharTexto, mas com arquivo em vez de texto, porque
+// o wa.me não aceita anexar imagem por link. Sem suporte a compartilhar
+// arquivo (a maioria dos navegadores desktop), baixa a imagem e avisa a
+// pessoa pra anexar ela manualmente na conversa do WhatsApp.
+async function compartilharImagem(blob, nomeArquivo) {
+  const file = new File([blob], nomeArquivo, { type: "image/png" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // pessoa cancelou o compartilhamento
+      // qualquer outro erro cai no fallback abaixo
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  showToast("Imagem baixada — anexe ela numa conversa do WhatsApp.");
+}
+
 function showToast(message, ms = 2800) {
   const el = document.getElementById("tpl-toast").content.cloneNode(true).querySelector(".toast");
   el.textContent = message;
