@@ -66,13 +66,25 @@ async function refreshLookupCache() {
 }
 
 async function getLookupData() {
-  // tenta usar cache local primeiro (funciona offline); se vazio, busca da rede
+  // Prioriza sempre a rede (dados atuais da planilha); o cache local só é
+  // usado quando estamos offline ou a rede falha, para o app continuar
+  // funcionando em campo. Antes disso, o cache "vencia" a rede pra sempre —
+  // uma vez salvo, nunca era atualizado de novo mesmo com internet, o que
+  // deixava o app preso em listas antigas (ex.: Meeiros sem o campo de
+  // código correto) mesmo depois de corrigido o código do app.
+  if (navigator.onLine) {
+    try {
+      return await refreshLookupCache();
+    } catch (e) {
+      // rede indisponível/instável mesmo com navigator.onLine true — cai pro cache abaixo
+    }
+  }
   const keys = ["produtos", "produtosVenda", "meeiros", "estufas", "operacoes", "ordens", "fornecedores", "clientes"];
   const cached = await Promise.all(keys.map((k) => cacheGet(k)));
   if (cached.every((v) => v && v.length !== undefined)) {
     return Object.fromEntries(keys.map((k, i) => [k, cached[i]]));
   }
-  return refreshLookupCache();
+  throw new Error("Sem conexão e sem dados salvos localmente ainda — abra o app uma vez com internet.");
 }
 
 // --- Fila de apontamentos ----------------------------------------------------
