@@ -239,7 +239,7 @@ function acharChaveValorEstoque(produtos) {
 }
 
 async function fetchLookupData() {
-  const [produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes, plantio] =
+  const [produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes, plantio, setoresFerti] =
     await Promise.all([
       readTable(TABLES.produtos),
       readTable(TABLES.produtosVenda),
@@ -250,10 +250,11 @@ async function fetchLookupData() {
       readTable(TABLES.fornecedor),
       readTable(TABLES.cliente).catch(() => []), // tabela pequena, pode não existir em toda planilha
       readTable(TABLES.plantio).catch(() => []), // usado pra validar/achar o plantio Ativo da estufa
+      readTable(TABLES.setoresFerti).catch(() => []), // nº de plantas por setor/plantio (aba "Setores Ferti")
     ]);
   comCodigoNormalizado(meeiros);
   comCodigoNormalizado(estufas);
-  return { produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes, plantio };
+  return { produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes, plantio, setoresFerti };
 }
 
 // Lê só a coluna "Seq" de uma tabela e devolve o próximo número (maior + 1) —

@@ -94,6 +94,62 @@ function plantiosAtivos(lookups, estufaNome) {
   return labels;
 }
 
+// Extrai o número do "Setor" (ex.: "Setor 3", "setor 3" -> 3) — a planilha
+// grafa com maiúscula/minúscula inconsistente, mas o número é o que importa.
+function numeroDoSetor(texto) {
+  const m = String(texto || "").match(/\d+/);
+  return m ? Number(m[0]) : null;
+}
+
+// Quantas plantas cada setor da estufa tem no PLANTIO ATIVO (aba "Setores
+// Ferti") — essa aba guarda o histórico de todos os plantios, então filtra
+// pelo mesmo plantio que plantiosAtivos() já usa em outras validações, senão
+// misturaria setores de safras antigas com a atual.
+function setoresDoPlantioAtivo(lookups, estufaNome) {
+  const plantioAtivo = plantiosAtivos(lookups, estufaNome)[0];
+  if (!plantioAtivo) return [];
+  return (lookups.setoresFerti || [])
+    .filter((s) => s["Estufa"] === estufaNome && s["Plantio"] === plantioAtivo)
+    .map((s) => ({ setor: numeroDoSetor(s["Setor"]), plantas: Number(s["Plantas"]) || 0 }))
+    .filter((s) => s.setor && s.setor >= 1 && s.setor <= 6)
+    .sort((a, b) => a.setor - b.setor);
+}
+
+// Quanto de produto cada setor recebe numa Fertirrigação: plantas do setor ÷
+// 1.000 × dosagem informada (mesma fórmula da aba "Registro Ferti", coluna
+// "Setor N"). Devolve um objeto { "Qtde Setor 1": valor, ... } pronto pra
+// entrar em `fields` — setor sem planta ativa fica null (planilha ignora).
+function calcularSetoresFerti(lookups, estufaNome, dosagem) {
+  const dosagemNum = Number(dosagem) || 0;
+  const resultado = {};
+  SETOR_FIELDS.forEach((_, i) => (resultado[`Qtde Setor ${i + 1}`] = null));
+  setoresDoPlantioAtivo(lookups, estufaNome).forEach((s) => {
+    resultado[`Qtde Setor ${s.setor}`] = Math.round((s.plantas / 1000) * dosagemNum * 100) / 100;
+  });
+  return resultado;
+}
+
+// Data de plantio do PLANTIO ATIVO da estufa (aba "Plantio") — usada pra
+// calcular o D.A.T (dias após transplantio) sozinho, sem o usuário ter que
+// contar na mão. Vem como serial Excel (mesmo formato de "Data").
+function dataPlantioAtiva(lookups, estufaNome) {
+  const plantioAtivo = plantiosAtivos(lookups, estufaNome)[0];
+  if (!plantioAtivo) return null;
+  const linha = (lookups.plantio || []).find(
+    (p) => p["Estufa"] === estufaNome && p["Plantio"] === plantioAtivo && p["Data Plantio"]
+  );
+  return linha ? Number(linha["Data Plantio"]) : null;
+}
+
+// D.A.T = data do lançamento − data de plantio do plantio ativo, em dias.
+function calcularDAT(lookups, estufaNome, dataFormulario) {
+  if (!estufaNome || !dataFormulario) return null;
+  const dataPlantio = dataPlantioAtiva(lookups, estufaNome);
+  if (dataPlantio === null) return null;
+  const serialForm = toExcelSerial(dataFormulario);
+  return Math.max(0, Math.round(serialForm - dataPlantio));
+}
+
 // Validação client-side — ÚNICA linha de defesa agora que o app grava direto
 // (não existe mais uma fórmula "Validação" da planilha conferindo depois).
 function validateBeforeSend(fields, lookups) {

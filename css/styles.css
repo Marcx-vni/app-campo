@@ -179,6 +179,20 @@ html, body {
 .card-sub { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .card-row { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
 .card-row span:first-child { color: var(--muted); }
+
+.ferti-setores-calc {
+  background: var(--gray-bg);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.ferti-total-row {
+  border-top: 1px dashed var(--border);
+  margin-top: 4px;
+  padding-top: 6px;
+  font-weight: 600;
+  color: var(--verde);
+}
 .empty-state { text-align: center; color: var(--muted); padding: 40px 20px; }
 
 /* --- Resumo rápido (topo da tela Ordens) --- */

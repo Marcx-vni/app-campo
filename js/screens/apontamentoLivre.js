@@ -103,16 +103,20 @@ const ScreenApontamentoLivre = {
         <input type="number" step="0.01" id="f-dosagem-alterada" placeholder="Deixe em branco pra usar a dosagem cadastrada" />
       `;
     } else if (this.bloco === "Ferti") {
+      // Setor por setor não é mais digitado à mão: a partir da Estufa + Plantio
+      // ativo, o app já sabe quantas plantas tem em cada setor (aba "Setores
+      // Ferti") e calcula sozinho qtde = plantas ÷ 1.000 × dosagem — igual a
+      // conta feita na planilha. D.A.T também é sugerido automaticamente
+      // (data do lançamento − data de plantio do plantio ativo), mas continua
+      // editável caso precise corrigir.
       camposEspecificos = `
-        <label>🧪 Dosagem Ferti</label>
+        <label>🧪 Dosagem (g ou mL) por 1.000 plantas</label>
         <input type="number" step="0.01" id="f-dosagem-ferti" />
-        <label>⏱️ D.A.T (dias após transplantio, opcional)</label>
-        <input type="number" id="f-dat" />
-        <div class="section-title">Qtde por setor (ao menos 1)</div>
-        <div class="setores-grid">
-          ${[1, 2, 3, 4, 5, 6]
-            .map((n) => `<div><label>Setor ${n}</label><input type="number" step="0.01" class="f-setor" data-setor="${n}" /></div>`)
-            .join("")}
+        <label>⏱️ D.A.T (dias após plantio)</label>
+        <input type="number" id="f-dat" placeholder="Calculado automaticamente" />
+        <div class="section-title">Quantidade por setor (calculada automaticamente)</div>
+        <div id="ferti-setores-calc" class="ferti-setores-calc">
+          <div class="empty-state">Escolha a estufa pra calcular.</div>
         </div>
       `;
     } else if (this.bloco === "Venda") {
@@ -178,6 +182,53 @@ const ScreenApontamentoLivre = {
     let meeiroCombo = null;
     let estufaCombo = null;
     let fornecedorCombo = null;
+
+    // Resolve o Código Estufa escolhido no combobox de volta pro nome da
+    // estufa (é o nome que as tabelas de Plantio/Setores Ferti usam).
+    const resolverEstufaNome = () => {
+      const val = estufaCombo ? estufaCombo.getValue() : null;
+      const match = val ? lookups.estufas.find((e) => String(e.__cod) === String(val)) : null;
+      return match ? match["Estufa"] : null;
+    };
+
+    // Recalcula a lista "Quantidade por setor" da Fertirrigação toda vez que
+    // a Estufa ou a Dosagem mudam — só existe quando bloco === "Ferti".
+    const atualizarCalculoFerti = () => {
+      const calcEl = form.querySelector("#ferti-setores-calc");
+      if (!calcEl) return;
+      const estufaNome = resolverEstufaNome();
+      if (!estufaNome) {
+        calcEl.innerHTML = `<div class="empty-state">Escolha a estufa pra calcular.</div>`;
+        return;
+      }
+      const setores = setoresDoPlantioAtivo(lookups, estufaNome);
+      if (setores.length === 0) {
+        calcEl.innerHTML = `<div class="empty-state">Nenhum setor com plantio ativo encontrado pra ${escapeHtml(estufaNome)}.</div>`;
+        return;
+      }
+      const dosagem = Number(form.querySelector("#f-dosagem-ferti")?.value) || 0;
+      const linhas = setores
+        .map((s) => {
+          const qtd = (s.plantas / 1000) * dosagem;
+          return `<div class="card-row"><span>Setor ${s.setor} · ${formatNumero(s.plantas)} plantas</span><span>${dosagem > 0 ? formatNumero(qtd) : "—"}</span></div>`;
+        })
+        .join("");
+      const total = setores.reduce((soma, s) => soma + (s.plantas / 1000) * dosagem, 0);
+      calcEl.innerHTML = `
+        ${linhas}
+        <div class="card-row ferti-total-row"><span>Total</span><span>${dosagem > 0 ? `${formatNumero(total)} (${formatNumero(total / 1000)} no estoque)` : "—"}</span></div>
+      `;
+    };
+
+    // D.A.T sugerido: só preenche sozinho se o campo estiver vazio, pra não
+    // apagar um valor que a pessoa já tenha corrigido manualmente.
+    const sugerirDAT = () => {
+      const campoData = form.querySelector("#f-dat");
+      if (!campoData || campoData.value !== "") return;
+      const dat = calcularDAT(lookups, resolverEstufaNome(), form.querySelector("#f-data").value);
+      if (dat !== null) campoData.value = dat;
+    };
+
     if (this.bloco !== "Compra") {
       meeiroCombo = criarComboBusca(form.querySelector("#f-meeiro-combo"), meeiroOpcoes, {
         placeholder: "Buscar meeiro...",
@@ -185,11 +236,23 @@ const ScreenApontamentoLivre = {
       });
       estufaCombo = criarComboBusca(form.querySelector("#f-estufa-combo"), estufaOpcoes, {
         placeholder: "Buscar estufa...",
+        onChange:
+          this.bloco === "Ferti"
+            ? () => {
+                atualizarCalculoFerti();
+                sugerirDAT();
+              }
+            : undefined,
       });
     } else {
       fornecedorCombo = criarComboBusca(form.querySelector("#f-fornecedor-combo"), fornecedorOpcoes, {
         placeholder: "Buscar fornecedor...",
       });
+    }
+
+    if (this.bloco === "Ferti") {
+      form.querySelector("#f-dosagem-ferti").addEventListener("input", atualizarCalculoFerti);
+      form.querySelector("#f-data").addEventListener("change", sugerirDAT);
     }
 
     form.addEventListener("submit", async (ev) => {
@@ -226,11 +289,17 @@ const ScreenApontamentoLivre = {
         const dosagemAlterada = form.querySelector("#f-dosagem-alterada").value;
         fields["Alterar dosagem para:"] = dosagemAlterada !== "" ? Number(dosagemAlterada) : null;
       } else if (bloco === "Ferti") {
-        fields["Dosagem Ferti"] = Number(form.querySelector("#f-dosagem-ferti").value) || null;
-        fields["D.A.T"] = Number(form.querySelector("#f-dat").value) || null;
-        [1, 2, 3, 4, 5, 6].forEach((n) => {
-          fields["Qtde Setor " + n] = Number(form.querySelector(`.f-setor[data-setor="${n}"]`).value) || null;
-        });
+        const dosagem = Number(form.querySelector("#f-dosagem-ferti").value) || 0;
+        fields["Dosagem Ferti"] = dosagem || null;
+        // Mesma fórmula mostrada na tela (plantas do setor ÷ 1.000 × dosagem) —
+        // calculada de novo aqui em vez de ler os cards, pra garantir que o que
+        // é gravado é sempre a conta mais atual (estufa/dosagem podem ter
+        // mudado desde o último recálculo visual).
+        const estufaNomeAtual = lookups.estufas.find((e) => String(e.__cod) === String(fields["Código Estufa"]))?.["Estufa"];
+        Object.assign(fields, calcularSetoresFerti(lookups, estufaNomeAtual, dosagem));
+        const datInformado = form.querySelector("#f-dat").value;
+        fields["D.A.T"] =
+          datInformado !== "" ? Number(datInformado) : calcularDAT(lookups, estufaNomeAtual, fields["Data"]);
       } else if (bloco === "Venda") {
         fields["Operação"] = "Venda";
         fields["Quantidade"] = Number(form.querySelector("#f-quantidade").value);

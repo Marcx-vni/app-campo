@@ -30,7 +30,7 @@ const APP_CONFIG = {
 // já está rodando o código mais novo depois de um deploy, sem precisar abrir
 // o console. Sempre que mudar algo, atualize aqui E o CACHE_NAME em
 // service-worker.js (os dois números não precisam ser o mesmo, só sempre subir).
-const APP_VERSION = "v29";
+const APP_VERSION = "v30";
 
 // Nomes das Tabelas do Excel (definidos na planilha — não altere a menos que renomeie as tabelas lá)
 const TABLES = {
@@ -51,5 +51,6 @@ const TABLES = {
   cliente: "Cliente",
   setor: "Setor",
   plantio: "Plantio", // usado pra achar o plantio ATIVO de cada estufa (obrigatório em Uso/Ferti/Venda)
+  setoresFerti: "Setores", // aba "Setores Ferti" — nº de plantas por setor/plantio, usado pra calcular a Fertirrigação sozinho
 };
 
