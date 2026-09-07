@@ -208,8 +208,8 @@ html, body {
 .acao-rapida-primaria .acao-rapida-texto { color: white; }
 
 /* --- Atividade recente (cards com ícone, na tela Ordens) --- */
-.atividade-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
-.atividade-card .card-title, .atividade-card .card-sub { margin-bottom: 0; }
+.atividade-card-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.atividade-card-topo .card-title, .atividade-card-topo .card-sub { margin-bottom: 0; }
 .atividade-icone {
   flex-shrink: 0;
   width: 32px;

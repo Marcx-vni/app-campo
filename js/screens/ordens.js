@@ -131,35 +131,66 @@ const BLOCO_INFO = {
   Compra: { titulo: "Compra", icone: "🛒", cor: "atividade-icone-terracota" },
 };
 
+function formatMoeda(valor) {
+  return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 // Card de "Atividade recente" a partir de um item local da fila (o que foi
-// lançado neste aparelho — não é um feed de outros usuários).
+// lançado neste aparelho — não é um feed de outros usuários). Mostra o produto
+// usado e o total (quantidade aplicada, ou valor gasto/vendido) além do resumo.
 function atividadeCardHtml(item, lookups) {
-  const bloco = item.fields?.["Bloco"];
+  const f = item.fields || {};
+  const bloco = f["Bloco"];
   const info = BLOCO_INFO[bloco] || { titulo: bloco || "Apontamento", icone: "📋", cor: "atividade-icone-verde" };
+  const produtoNome = f["Produto"] || "—";
 
   let complemento;
   if (bloco === "Compra") {
-    complemento = item.fields?.["Produto"] || "";
+    complemento = produtoNome;
   } else {
-    const estufa = (lookups.estufas || []).find((e) => String(e.__cod) === String(item.fields?.["Código Estufa"]));
-    complemento = estufa ? estufa["Estufa"] : item.fields?.["Produto"] || "";
+    const estufa = (lookups.estufas || []).find((e) => String(e.__cod) === String(f["Código Estufa"]));
+    complemento = estufa ? estufa["Estufa"] : produtoNome;
   }
 
   let pessoa;
   if (bloco === "Compra") {
-    pessoa = item.fields?.["Fornecedor"] || "";
+    pessoa = f["Fornecedor"] || "";
   } else {
-    const meeiro = (lookups.meeiros || []).find((m) => String(m.__cod) === String(item.fields?.["Código Meeiro"]));
+    const meeiro = (lookups.meeiros || []).find((m) => String(m.__cod) === String(f["Código Meeiro"]));
     pessoa = meeiro ? meeiro["Meeiro"] : "";
   }
 
+  // Segunda linha de detalhe: quantidade aplicada (Uso/Ferti) ou total em R$ (Venda/Compra).
+  let totalLabel = null;
+  let totalValor = null;
+  if (bloco === "Uso") {
+    totalLabel = "Qtde. aplicada";
+    totalValor = `${Number(f["Quantidade"]) || 0} L`;
+  } else if (bloco === "Ferti") {
+    const totalSetores = SETOR_FIELDS.reduce((soma, campo) => soma + (Number(f[campo]) || 0), 0);
+    totalLabel = "Qtde. aplicada";
+    totalValor = `${totalSetores} L`;
+  } else if (bloco === "Venda") {
+    const total = (Number(f["Quantidade"]) || 0) * (Number(f["Valor Unitário"]) || 0);
+    totalLabel = "Total da venda";
+    totalValor = formatMoeda(total);
+  } else if (bloco === "Compra") {
+    const total = (Number(f["Quantidade"]) || 0) * (Number(f["Valor Unitário"]) || 0);
+    totalLabel = "Total gasto";
+    totalValor = formatMoeda(total);
+  }
+
   return `
-    <div class="card atividade-card">
-      <div class="atividade-icone ${info.cor}">${info.icone}</div>
-      <div style="flex:1; min-width:0;">
-        <div class="card-title">${escapeHtml(info.titulo)}${complemento ? " — " + escapeHtml(complemento) : ""}</div>
-        <div class="card-sub">${[pessoa, formatRelativeTime(item.createdAt)].filter(Boolean).join(" · ")}</div>
+    <div class="card">
+      <div class="atividade-card-topo">
+        <div class="atividade-icone ${info.cor}">${info.icone}</div>
+        <div style="flex:1; min-width:0;">
+          <div class="card-title">${escapeHtml(info.titulo)}${complemento ? " — " + escapeHtml(complemento) : ""}</div>
+          <div class="card-sub">${[pessoa, formatRelativeTime(item.createdAt)].filter(Boolean).join(" · ")}</div>
+        </div>
       </div>
+      ${bloco !== "Compra" ? `<div class="card-row"><span>Produto</span><span>${escapeHtml(produtoNome)}</span></div>` : ""}
+      ${totalLabel ? `<div class="card-row"><span>${totalLabel}</span><span>${escapeHtml(totalValor)}</span></div>` : ""}
     </div>`;
 }
 
