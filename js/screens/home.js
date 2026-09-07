@@ -229,11 +229,11 @@ function chaveFerti(estufa, produto, dataSerial, meeiro) {
 // Texto pronto pra compartilhar por WhatsApp — um "relatório de campo" com
 // as quantidades por setor, pra mandar direto pro meeiro que vai aplicar.
 function montarTextoWhatsAppFerti(fertiRow) {
-  // Arredondado pra grama inteira (a pedido do usuário) — lançamentos novos
-  // já são gravados assim; isso também arredonda lançamentos antigos que
-  // ainda tenham decimal, pra manter o recado sempre em número redondo.
+  // Arredondado pra dezena de grama (a pedido do usuário) — lançamentos
+  // novos já são gravados assim; isso também arredonda lançamentos antigos
+  // que ainda tenham valor "quebrado", pra manter o recado sempre redondo.
   const setores = [1, 2, 3, 4, 5, 6]
-    .map((n) => ({ n, v: Math.round(Number(fertiRow[`Setor ${n}`]) || 0) }))
+    .map((n) => ({ n, v: arredondarParaDezena(fertiRow[`Setor ${n}`]) }))
     .filter((s) => s.v > 0);
   const total = setores.reduce((soma, s) => soma + s.v, 0);
   // Dosagem e D.A.T ficaram de fora do texto a pedido do usuário — são
@@ -270,7 +270,7 @@ function atividadeCardHtml(row, produtos, fertiIndex) {
 
   if (fertiRow) {
     const setores = [1, 2, 3, 4, 5, 6]
-      .map((n) => Math.round(Number(fertiRow[`Setor ${n}`]) || 0))
+      .map((n) => arredondarParaDezena(fertiRow[`Setor ${n}`]))
       .filter((v) => v > 0);
     const total = setores.reduce((a, b) => a + b, 0);
     return `

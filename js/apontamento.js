@@ -115,18 +115,24 @@ function setoresDoPlantioAtivo(lookups, estufaNome) {
     .sort((a, b) => a.setor - b.setor);
 }
 
+// Arredonda pra dezena de grama mais próxima (ex.: 693 -> 690, 655 -> 660) —
+// a pedido do usuário: balança de campo não pesa de grama em grama, e a
+// dezena redonda facilita a leitura tanto no card quanto no relatório do
+// WhatsApp. Usado em todo lugar que mostra ou grava quantidade de Ferti.
+function arredondarParaDezena(valor) {
+  return Math.round((Number(valor) || 0) / 10) * 10;
+}
+
 // Quanto de produto cada setor recebe numa Fertirrigação: plantas do setor ÷
 // 1.000 × dosagem informada (mesma fórmula da aba "Registro Ferti", coluna
 // "Setor N"). Devolve um objeto { "Qtde Setor 1": valor, ... } pronto pra
 // entrar em `fields` — setor sem planta ativa fica null (planilha ignora).
-// Arredondado pra grama inteira (a pedido do usuário): quem pesa no campo
-// usa balança comum, decimal de grama não ajuda em nada e só polui o card.
 function calcularSetoresFerti(lookups, estufaNome, dosagem) {
   const dosagemNum = Number(dosagem) || 0;
   const resultado = {};
   SETOR_FIELDS.forEach((_, i) => (resultado[`Qtde Setor ${i + 1}`] = null));
   setoresDoPlantioAtivo(lookups, estufaNome).forEach((s) => {
-    resultado[`Qtde Setor ${s.setor}`] = Math.round((s.plantas / 1000) * dosagemNum);
+    resultado[`Qtde Setor ${s.setor}`] = arredondarParaDezena((s.plantas / 1000) * dosagemNum);
   });
   return resultado;
 }

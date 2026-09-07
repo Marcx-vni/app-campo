@@ -210,7 +210,7 @@ const ScreenApontamentoLivre = {
       // Arredondado pra grama inteira aqui também, pra bater com o que
       // calcularSetoresFerti vai gravar de fato — senão a prévia mostraria
       // um número e a planilha gravaria outro.
-      const qtds = setores.map((s) => Math.round((s.plantas / 1000) * dosagem));
+      const qtds = setores.map((s) => arredondarParaDezena((s.plantas / 1000) * dosagem));
       const linhas = setores
         .map(
           (s, i) =>
