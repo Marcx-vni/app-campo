@@ -1,59 +1,51 @@
 // ============================================================================
-// REGRAS DE NEGÓCIO — montagem da linha de Apontamentos por Bloco e validação
-// client-side (espelha a Seção 3 e 4 da aba "Spec App Campo" da planilha).
-// A validação definitiva continua sendo a coluna AF, lida de volta após gravar.
+// REGRAS DE NEGÓCIO — validação e montagem das linhas gravadas DIRETO nas
+// tabelas finais (Registro de Inventario / Registro Ferti / Financeiro).
+//
+// Histórico: a versão anterior gravava numa aba "Apontamentos" (só uma fila
+// de entrada) e dependia de uma fórmula "Validação" + uma macro no Excel pra
+// só então lançar no Registro de Inventario. Por decisão do usuário, essa
+// etapa intermediária foi removida — o app grava direto, e por isso assume
+// 100% da validação que antes era feita pela planilha (replicada aqui a
+// partir da macro VBA original "Motor"/"mdlLancamento").
 // ============================================================================
 
-// Ordem exata das 43 colunas da tabela Apontamentos (A:AQ)
-const APONTAMENTOS_COLUMNS = [
-  "Seq", "Bloco", "Data", "Código Meeiro", "Meeiro", "Código Estufa", "Estufa",
-  "Produto", "Código Produto", "Tipo", "Dosagem ML/20LT", "Alterar dosagem para:",
-  "Operação", "Tipo Movimentação", "Quantidade", "Total Produto", "Plantio",
-  "Valor Unitário", "Valor Total", "Valor Embalagem", "Venda Líquida", "Cliente",
-  "Data Vencimento", "Fornecedor", "Nota Fiscal", "Complemento", "Status",
-  "Origem", "Usuario", "Gravado em", "Seq Inventario", "Validação", "Setor",
-  "Dosagem Ferti", "D.A.T", "Qtde Setor 1", "Qtde Setor 2", "Qtde Setor 3",
-  "Qtde Setor 4", "Qtde Setor 5", "Qtde Setor 6", "Total Ferti", "ID Ordem",
+// --- Colunas das tabelas de destino, na ordem exata da planilha real -------
+
+const REGISTRO_INVENTARIO_COLUMNS = [
+  "Código", "Tipo Movimentação", "Data", "Código Estufa", "Estufa", "Código Meeiro", "Meeiro",
+  "Tipo", "Descricao", "Volume Calda", "Qtde.", "Valor Entrada", "Operação", "Fornecedor",
+  "Nota Fiscal", "Plantio", "Complemento", "Seq", "Total Entrada", "Custo Medio saida",
+  "Total Saida", "Cliente", "Total Venda", "Venda Liquida", "Valor Caixa", "Total Caixa",
+  "Status", "Estação", "Data Vencimento", "Origem", "Usuario", "Gravado em", "Valor Unit. Venda",
 ];
-
-// Colunas que a PLANILHA calcula sozinha — o app nunca envia valor nelas.
-// "Meeiro", "Estufa" e "Tipo" SAÍRAM daqui de propósito: o app já tem essas listas
-// carregadas em memória (mesmos dados usados pra validar antes de enviar), então
-// preencherNomesCalculados() manda o valor pronto em vez de depender de uma fórmula
-// de VLOOKUP rodando de novo pra cada linha nova — menos fórmula, planilha mais leve.
-const COMPUTED_COLUMNS = new Set([
-  "Seq", "Código Produto", "Tipo Movimentação", "Total Produto",
-  "Plantio", "Valor Total", "Venda Líquida", "Seq Inventario", "Validação", "Total Ferti",
+// Colunas que a PRÓPRIA TABELA calcula (fórmula) — o app nunca escreve nelas.
+const REGISTRO_INVENTARIO_COMPUTED = new Set([
+  "Total Entrada", "Custo Medio saida", "Total Saida", "Total Caixa", "Estação",
 ]);
-COMPUTED_COLUMNS.add("Dosagem ML/20LT"); // calculada, a menos que "Alterar dosagem para" seja usada
 
-// Preenche "Meeiro", "Estufa" e "Tipo" a partir das listas já carregadas (lookups),
-// espelhando os VLOOKUPs que a planilha faria sozinha — assim o app manda o valor
-// pronto e a planilha não precisa recalcular isso a cada apontamento novo.
-// Quando não encontra (ex.: produto de Venda que só existe na ProdVenda, não na
-// Tabela613), deixa em branco de propósito: cai de volta pra fórmula da planilha,
-// que vai continuar acusando "Produto inexistente" nesse caso, como já acontecia.
-function preencherNomesCalculados(fields, lookups) {
-  if (!lookups) return;
-  if (fields["Código Meeiro"]) {
-    const m = lookups.meeiros.find((x) => String(x.__cod) === String(fields["Código Meeiro"]));
-    if (m) fields["Meeiro"] = m["Meeiro"];
-  }
-  if (fields["Código Estufa"]) {
-    const e = lookups.estufas.find((x) => String(x.__cod) === String(fields["Código Estufa"]));
-    if (e) fields["Estufa"] = e["Estufa"];
-  }
-  if (fields["Produto"]) {
-    // Na planilha, a coluna "Tipo" (classificação: DEFENSIVO/FOLIARES/FERTIRRIGACAO...)
-    // vem da Tabela613 (Cadastro de Produtos E Estoque), numa coluna cujo cabeçalho
-    // é só um espaço em branco (" ") — herdado assim do arquivo original do usuário.
-    const p = lookups.produtos.find((x) => x["Produto"] === fields["Produto"]);
-    if (p && p[" "] !== undefined) fields["Tipo"] = p[" "];
-  }
+const REGISTRO_FERTI_COLUMNS = [
+  "Data", "Estufa", "Produto", "Dosagem", "Setor 1", "Setor 2", "Setor 3",
+  "Setor 4", "Setor 5", "Setor 6", "Total", "Plantio", "D.A.T", "Meeiro",
+];
+const REGISTRO_FERTI_COMPUTED = new Set(["Total"]);
+
+const FINANCEIRO_COLUMNS = [
+  "Seq Inventario", "Data Compra", "Data Vencimento", "Fornecedor", "Nota Fiscal", "Produto",
+  "Qtde.", "Valor Unit.", "Valor Total", "Status", "Data Pagamento", "Valor Pago",
+  "Dias em Atraso", "Pagador", "Origem", "Usuario", "Gravado em",
+];
+const FINANCEIRO_COMPUTED = new Set(["Data Pagamento", "Valor Pago", "Dias em Atraso"]);
+
+function montarLinha(colunas, computadas, valores) {
+  return colunas.map((col) => {
+    if (computadas.has(col)) return null;
+    const v = valores[col];
+    return v === undefined ? null : v;
+  });
 }
 
-// Converte uma data JS (ou string yyyy-mm-dd) para o serial numérico do Excel.
-// A API do Excel aceita string ISO também, mas serial evita ambiguidade de fuso/formatação.
+// Converte data JS/string para o serial numérico do Excel (evita ambiguidade de fuso).
 function toExcelSerial(dateInput) {
   const d = typeof dateInput === "string" ? new Date(dateInput + "T00:00:00") : dateInput;
   const excelEpoch = new Date(Date.UTC(1899, 11, 30));
@@ -61,17 +53,13 @@ function toExcelSerial(dateInput) {
   return Math.round((utcDate - excelEpoch) / 86400000);
 }
 
-// Monta o array de 43 valores para enviar via addTableRow, a partir de um objeto
-// { "Bloco": "Uso", "Data": "2026-09-06", "Código Meeiro": "M03", ... }
-function buildApontamentoRow(fields) {
-  return APONTAMENTOS_COLUMNS.map((col) => {
-    if (COMPUTED_COLUMNS.has(col)) return null;
-    const v = fields[col];
-    return v === undefined ? null : v;
-  });
+// Como acima, mas preservando a hora (usado em "Gravado em").
+function toExcelSerialDateTime(date) {
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  return (date.getTime() - excelEpoch) / 86400000;
 }
 
-// Campos obrigatórios por bloco, conforme Seção 3 da especificação.
+// Campos obrigatórios por bloco (entrada do usuário, antes de qualquer cálculo).
 const REQUIRED_FIELDS = {
   Uso: ["Bloco", "Data", "Código Meeiro", "Código Estufa", "Produto", "Operação", "Quantidade"],
   Ferti: ["Bloco", "Data", "Código Meeiro", "Código Estufa", "Produto", "Dosagem Ferti"], // + ao menos 1 setor
@@ -81,8 +69,26 @@ const REQUIRED_FIELDS = {
 
 const SETOR_FIELDS = ["Qtde Setor 1", "Qtde Setor 2", "Qtde Setor 3", "Qtde Setor 4", "Qtde Setor 5", "Qtde Setor 6"];
 
-// Validação client-side ANTES de tentar enviar (bloqueia o pior caso ainda no app,
-// sem gastar uma sincronização). Não substitui a leitura da coluna AF depois de gravar.
+function achar(lista, prop, valor) {
+  return (lista || []).find((x) => x[prop] === valor);
+}
+function acharPorCod(lista, cod) {
+  return (lista || []).find((x) => String(x.__cod) === String(cod));
+}
+
+// Acha o(s) plantio(s) ATIVO(s) de uma estufa (por nome). Espelha a checagem
+// da macro original: precisa existir exatamente UM plantio Ativo — nenhum ou
+// mais de um bloqueia o lançamento (evita registrar na safra errada).
+function plantiosAtivos(lookups, estufaNome) {
+  const rows = (lookups.plantio || []).filter(
+    (p) => p["Estufa"] === estufaNome && String(p["Status"]).trim().toLowerCase() === "ativo"
+  );
+  const labels = [...new Set(rows.map((p) => p["Plantio"]).filter(Boolean))];
+  return labels;
+}
+
+// Validação client-side — ÚNICA linha de defesa agora que o app grava direto
+// (não existe mais uma fórmula "Validação" da planilha conferindo depois).
 function validateBeforeSend(fields, lookups) {
   const bloco = fields["Bloco"];
   if (!bloco) return "Bloco não informado";
@@ -103,28 +109,195 @@ function validateBeforeSend(fields, lookups) {
     if (Number(fields["Quantidade"]) <= 0) return "Quantidade inválida";
   }
 
-  if (lookups) {
-    // Comparação por String() porque o <select> do formulário sempre devolve
-    // texto, mas o "Codigo" na planilha vem como número via Graph API
-    // (ex.: 3 !== "3" com === faria "Meeiro inexistente" mesmo estando certo).
-    if (fields["Código Meeiro"] && !lookups.meeiros.some((m) => String(m.__cod) === String(fields["Código Meeiro"]))) {
-      return "Meeiro inexistente";
-    }
-    if (fields["Código Estufa"] && !lookups.estufas.some((e) => String(e.__cod) === String(fields["Código Estufa"]))) {
-      return "Estufa inexistente";
-    }
-    if (fields["Produto"]) {
-      // Na Venda, a lista válida de produtos é a de "Cadastro de Venda" (coluna "Tipo").
-      const listaValida =
-        bloco === "Venda"
-          ? (lookups.produtosVenda || []).some((p) => p["Tipo"] === fields["Produto"])
-          : lookups.produtos.some((p) => p["Produto"] === fields["Produto"]);
-      if (!listaValida) return "Produto inexistente";
-    }
-    if (fields["Operação"] && !lookups.operacoes.some((o) => o["Operação"] === fields["Operação"])) {
-      return "Operação inexistente";
+  if (!lookups) return null;
+
+  if (fields["Código Meeiro"] && !acharPorCod(lookups.meeiros, fields["Código Meeiro"])) {
+    return "Meeiro inexistente";
+  }
+  if (fields["Código Estufa"] && !acharPorCod(lookups.estufas, fields["Código Estufa"])) {
+    return "Estufa inexistente";
+  }
+  if (fields["Produto"]) {
+    // Na Venda, o produto vem do Cadastro de Vendas (ProdVenda) — não do
+    // cadastro geral de insumos (Tabela613), que é outra lista.
+    const encontrado =
+      bloco === "Venda" ? achar(lookups.produtosVenda, "Tipo", fields["Produto"]) : achar(lookups.produtos, "Produto", fields["Produto"]);
+    if (!encontrado) return "Produto inexistente";
+  }
+  if (fields["Operação"] && bloco !== "Venda" && !achar(lookups.operacoes, "Operação", fields["Operação"])) {
+    return "Operação inexistente";
+  }
+
+  // Plantio: obrigatório pra Uso/Ferti/Venda (não pra Compra, que não é por estufa).
+  if (bloco !== "Compra" && fields["Código Estufa"]) {
+    const estufa = acharPorCod(lookups.estufas, fields["Código Estufa"]);
+    const estufaNome = estufa ? estufa["Estufa"] : null;
+    if (estufaNome) {
+      const labels = plantiosAtivos(lookups, estufaNome);
+      if (labels.length === 0) return `Plantio não localizado para a estufa ${estufaNome}`;
+      if (labels.length > 1) {
+        return `A estufa ${estufaNome} tem mais de um PLANTIO Ativo. Encerre a safra anterior antes de lançar.`;
+      }
     }
   }
 
   return null; // ok
+}
+
+// ============================================================================
+// MONTAGEM DAS LINHAS FINAIS — espelha PreencheInventario/PreencheFerti/
+// PreencheFinanceiro da macro "Motor" original.
+// Devolve { inventario, ferti, financeiro, seq } prontos pra addTableRow.
+// `seq` já vem calculado (próximo número livre) e é usado em Inventario e,
+// se for Compra, também no Financeiro (pra ligar os dois registros).
+// ============================================================================
+function prepararRegistro(fields, lookups, seq, usuario) {
+  const bloco = fields["Bloco"];
+  const agora = new Date();
+
+  const estufa = fields["Código Estufa"] ? acharPorCod(lookups.estufas, fields["Código Estufa"]) : null;
+  const meeiro = fields["Código Meeiro"] ? acharPorCod(lookups.meeiros, fields["Código Meeiro"]) : null;
+  const estufaNome = estufa ? estufa["Estufa"] : null;
+  const meeiroNome = meeiro ? meeiro["Meeiro"] : null;
+  const plantioLabel = estufaNome ? (plantiosAtivos(lookups, estufaNome)[0] || null) : null;
+
+  // Código/Tipo(classificação)/Descrição do produto — fonte depende do bloco:
+  // Venda usa a ProdVenda (Cadastro de Vendas); os demais usam a Tabela613
+  // (Cadastro de Produtos E Estoque).
+  let codigoProduto = null, tipoProduto = null, descricaoProduto = null, dosagemPadrao = 0;
+  if (bloco === "Venda") {
+    const p = achar(lookups.produtosVenda, "Tipo", fields["Produto"]);
+    if (p) {
+      codigoProduto = p["Cod."];
+      tipoProduto = p["GRUPO"]; // classificação (ex.: PIMENTAO/TOMATE)
+      descricaoProduto = p["Tipo"]; // nome do produto (ex.: P.VERMELHO) — cabeçalho confuso, é da planilha original
+    }
+  } else {
+    const p = achar(lookups.produtos, "Produto", fields["Produto"]);
+    if (p) {
+      codigoProduto = p["Código"];
+      tipoProduto = p[" "]; // classificação (DEFENSIVO/FOLIARES/...) — coluna sem nome na planilha original
+      descricaoProduto = p["Produto"];
+      dosagemPadrao = Number(p["Dosagem ML/20LT"]) || 0;
+    }
+  }
+
+  const base = {
+    "Código": codigoProduto,
+    "Data": toExcelSerial(fields["Data"]),
+    "Tipo": tipoProduto,
+    "Descricao": descricaoProduto,
+    "Operação": fields["Operação"] || null,
+    "Seq": seq,
+    "Status": "Ativo",
+    "Complemento": fields["Complemento"] || null,
+    "Origem": "App Campo",
+    "Usuario": usuario,
+    "Gravado em": toExcelSerialDateTime(agora),
+  };
+
+  let inventario = { ...base };
+  let ferti = null;
+  let financeiro = null;
+
+  if (bloco === "Uso") {
+    const dosagemAlterada = Number(fields["Alterar dosagem para:"]) || 0;
+    const quantidadeLitros = Number(fields["Quantidade"]) || 0;
+    let totalProduto;
+    if (dosagemPadrao + dosagemAlterada === 0) {
+      totalProduto = quantidadeLitros;
+    } else if (dosagemAlterada > 0) {
+      totalProduto = (quantidadeLitros / 20) * dosagemAlterada / 1000;
+    } else {
+      totalProduto = (quantidadeLitros / 20) * dosagemPadrao / 1000;
+    }
+    Object.assign(inventario, {
+      "Tipo Movimentação": "S",
+      "Código Estufa": fields["Código Estufa"],
+      "Estufa": estufaNome,
+      "Código Meeiro": fields["Código Meeiro"],
+      "Meeiro": meeiroNome,
+      "Plantio": plantioLabel,
+      "Volume Calda": quantidadeLitros * 1000,
+      "Qtde.": totalProduto,
+    });
+  } else if (bloco === "Ferti") {
+    const setores = SETOR_FIELDS.map((f) => Number(fields[f]) || 0);
+    const totalFerti = setores.reduce((a, b) => a + b, 0);
+    Object.assign(inventario, {
+      "Tipo Movimentação": "S",
+      "Código Estufa": fields["Código Estufa"],
+      "Estufa": estufaNome,
+      "Código Meeiro": fields["Código Meeiro"],
+      "Meeiro": meeiroNome,
+      "Plantio": plantioLabel,
+      "Operação": "Saída Consumo",
+      "Volume Calda": totalFerti,
+      "Qtde.": totalFerti / 1000,
+    });
+    ferti = {
+      "Data": toExcelSerial(fields["Data"]),
+      "Estufa": estufaNome,
+      "Produto": descricaoProduto,
+      "Dosagem": Number(fields["Dosagem Ferti"]) || 0,
+      "Setor 1": setores[0], "Setor 2": setores[1], "Setor 3": setores[2],
+      "Setor 4": setores[3], "Setor 5": setores[4], "Setor 6": setores[5],
+      "Plantio": plantioLabel,
+      "D.A.T": Number(fields["D.A.T"]) || null,
+      "Meeiro": meeiroNome,
+    };
+  } else if (bloco === "Venda") {
+    const quantidade = Number(fields["Quantidade"]) || 0;
+    const valorUnitario = Number(fields["Valor Unitário"]) || 0;
+    const valorEmbalagem = Number(fields["Valor Embalagem"]) || 0;
+    const totalVenda = quantidade * valorUnitario;
+    const vendaLiquida = valorEmbalagem > 0 ? totalVenda - quantidade * valorEmbalagem : totalVenda;
+    Object.assign(inventario, {
+      "Tipo Movimentação": "S",
+      "Código Estufa": fields["Código Estufa"],
+      "Estufa": estufaNome,
+      "Código Meeiro": fields["Código Meeiro"],
+      "Meeiro": meeiroNome,
+      "Plantio": plantioLabel,
+      "Qtde.": quantidade,
+      "Cliente": fields["Cliente"],
+      "Valor Unit. Venda": valorUnitario,
+      "Total Venda": totalVenda,
+      "Venda Liquida": vendaLiquida,
+      "Valor Caixa": valorEmbalagem,
+    });
+  } else if (bloco === "Compra") {
+    const quantidade = Number(fields["Quantidade"]) || 0;
+    const valorUnitario = Number(fields["Valor Unitário"]) || 0;
+    Object.assign(inventario, {
+      "Tipo Movimentação": "E",
+      "Qtde.": quantidade,
+      "Valor Entrada": valorUnitario,
+      "Fornecedor": fields["Fornecedor"],
+      "Nota Fiscal": fields["Nota Fiscal"] || null,
+      "Data Vencimento": fields["Data Vencimento"] ? toExcelSerial(fields["Data Vencimento"]) : null,
+    });
+    financeiro = {
+      "Seq Inventario": seq,
+      "Data Compra": toExcelSerial(fields["Data"]),
+      "Data Vencimento": fields["Data Vencimento"] ? toExcelSerial(fields["Data Vencimento"]) : null,
+      "Fornecedor": fields["Fornecedor"],
+      "Nota Fiscal": fields["Nota Fiscal"] || null,
+      "Produto": descricaoProduto,
+      "Qtde.": quantidade,
+      "Valor Unit.": valorUnitario,
+      "Valor Total": quantidade * valorUnitario,
+      "Status": "A Pagar",
+      "Origem": "App Campo",
+      "Usuario": usuario,
+      "Gravado em": toExcelSerialDateTime(agora),
+    };
+  }
+
+  return {
+    seq,
+    inventario: montarLinha(REGISTRO_INVENTARIO_COLUMNS, REGISTRO_INVENTARIO_COMPUTED, inventario),
+    ferti: ferti ? montarLinha(REGISTRO_FERTI_COLUMNS, REGISTRO_FERTI_COMPUTED, ferti) : null,
+    financeiro: financeiro ? montarLinha(FINANCEIRO_COLUMNS, FINANCEIRO_COMPUTED, financeiro) : null,
+  };
 }

@@ -179,7 +179,7 @@ function comCodigoNormalizado(lista) {
 }
 
 async function fetchLookupData() {
-  const [produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes] =
+  const [produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes, plantio] =
     await Promise.all([
       readTable(TABLES.produtos),
       readTable(TABLES.produtosVenda),
@@ -189,8 +189,22 @@ async function fetchLookupData() {
       readTable(TABLES.ordens),
       readTable(TABLES.fornecedor),
       readTable(TABLES.cliente).catch(() => []), // tabela pequena, pode não existir em toda planilha
+      readTable(TABLES.plantio).catch(() => []), // usado pra validar/achar o plantio Ativo da estufa
     ]);
   comCodigoNormalizado(meeiros);
   comCodigoNormalizado(estufas);
-  return { produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes };
+  return { produtos, produtosVenda, meeiros, estufas, operacoes, ordens, fornecedores, clientes, plantio };
+}
+
+// Lê só a coluna "Seq" de uma tabela e devolve o próximo número (maior + 1) —
+// espelha a função ProximoSeq() da macro VBA original ("Motor"). Como o app
+// agora grava direto (sem a macro), é o app quem garante essa numeração.
+async function proximoSeq(tableName) {
+  const linhas = await readTable(tableName);
+  let max = 0;
+  for (const l of linhas) {
+    const v = Number(l["Seq"]);
+    if (!Number.isNaN(v) && v > max) max = v;
+  }
+  return max + 1;
 }

@@ -27,22 +27,22 @@ const APP_CONFIG = {
 
 // Nomes das Tabelas do Excel (definidos na planilha — não altere a menos que renomeie as tabelas lá)
 const TABLES = {
-  apontamentos: "Apontamentos",
+  // O app grava DIRETO nas tabelas finais — sem passar pela aba "Apontamentos"
+  // (que era só uma caixa de entrada temporária, processada por uma macro no
+  // Excel). Por decisão do usuário, essa etapa intermediária foi removida:
+  // a validação passou a ser 100% responsabilidade do app.
+  registroInventario: "Tabela2", // aba "Registro de Inventario" — tabela principal de estoque
+  registroFerti: "Tabela216", // aba "Registro Ferti" — detalhe por setor de aplicações de Ferti
+  financeiro: "Financeiro", // aba "Financeiro" — contas a pagar geradas por Compra
   ordens: "Ordens",
-  produtos: "Tabela613",
-  produtosVenda: "ProdVenda", // lista de produtos vendáveis (aba "Cadastro de Venda"), coluna "Tipo"
+  produtos: "Tabela613", // aba "Cadastro de Produtos E Estoque." — insumos (defensivos/fertilizantes)
+  produtosVenda: "ProdVenda", // lista de produtos vendáveis (aba "Cadastro de Vendas")
   operacao: "Operacao",
   fornecedor: "Fornecedor",
   estufas: "Estufas",
   meeiros: "Meeiros",
   cliente: "Cliente",
   setor: "Setor",
+  plantio: "Plantio", // usado pra achar o plantio ATIVO de cada estufa (obrigatório em Uso/Ferti/Venda)
 };
 
-const SHEETS = {
-  apontamentos: "Apontamentos",
-  ordens: "Ordens de Aplicacao",
-  produtos: "Cadastro de Produtos E Estoque.",
-  cadastrosGerais: "Cadastros Gerais",
-  registroInventario: "Registro de Inventario",
-};

@@ -79,7 +79,7 @@ async function getLookupData() {
       // rede indisponível/instável mesmo com navigator.onLine true — cai pro cache abaixo
     }
   }
-  const keys = ["produtos", "produtosVenda", "meeiros", "estufas", "operacoes", "ordens", "fornecedores", "clientes"];
+  const keys = ["produtos", "produtosVenda", "meeiros", "estufas", "operacoes", "ordens", "fornecedores", "clientes", "plantio"];
   const cached = await Promise.all(keys.map((k) => cacheGet(k)));
   if (cached.every((v) => v && v.length !== undefined)) {
     return Object.fromEntries(keys.map((k, i) => [k, cached[i]]));

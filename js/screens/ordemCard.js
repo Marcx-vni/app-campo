@@ -126,7 +126,6 @@ const ScreenOrdemCard = {
           };
 
       const lookups = await getLookupData();
-      preencherNomesCalculados(fields, lookups);
       const erro = validateBeforeSend(fields, lookups);
       if (erro) {
         showToast(`Não foi possível enviar: ${erro}`);
