@@ -67,6 +67,10 @@ async function bootApp() {
     return;
   }
 
+  // destrava qualquer apontamento que ficou preso em "enviando" (página fechada
+  // ou recarregada no meio do envio anterior) — ele volta a ser tentado.
+  await queueDestravarEnviandoOrfaos();
+
   // carrega/atualiza cache de listas (offline-first: usa cache se não houver rede)
   try {
     await getLookupData();

@@ -68,7 +68,11 @@ async function getFileByPath(path) {
   return res.json();
 }
 
-async function graphFetch(path, options = {}) {
+// Códigos que o Excel Online devolve quando está sobrecarregado/instável momentaneamente
+// (não é erro do nosso código nem da planilha) — vale a pena tentar de novo.
+const GRAPH_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+async function graphFetch(path, options = {}, _tentativa = 1) {
   const token = await getAccessToken(); // lança "OFFLINE" se não houver rede e o token expirou
   const res = await fetch(`${workbookBase()}${path}`, {
     ...options,
@@ -80,6 +84,11 @@ async function graphFetch(path, options = {}) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    if (GRAPH_RETRYABLE_STATUS.has(res.status) && _tentativa < 3) {
+      // Backoff simples: espera um pouco mais a cada nova tentativa (1.5s, depois 3s)
+      await new Promise((r) => setTimeout(r, 1500 * _tentativa));
+      return graphFetch(path, options, _tentativa + 1);
+    }
     throw new Error(`Graph API ${res.status}: ${body}`);
   }
   if (res.status === 204) return null;

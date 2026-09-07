@@ -138,6 +138,17 @@ async function queuePending() {
   return all.filter((i) => i.status === "pendente" || i.status === "erro");
 }
 
+// Se a página fechar/recarregar no meio de um envio, o item fica preso em
+// "enviando" para sempre (nunca chega a "enviado" nem a "erro"). Chamado uma
+// vez ao abrir o app, antes de qualquer sincronização, para não deixar
+// nenhum apontamento esquecido — ele volta a ser tentado como "pendente".
+async function queueDestravarEnviandoOrfaos() {
+  const all = await queueAll();
+  const presos = all.filter((i) => i.status === "enviando");
+  await Promise.all(presos.map((i) => queueUpdate(i.localId, { status: "pendente" })));
+  return presos.length;
+}
+
 async function queueDiscard(localId) {
   return withStore(STORES.queue, "readwrite", (store) => store.delete(localId));
 }
