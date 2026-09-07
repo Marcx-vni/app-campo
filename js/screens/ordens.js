@@ -157,6 +157,18 @@ function formatNumero(valor) {
   return Number(valor || 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 }
 
+// Alguns produtos do Cadastro (Tabela613) têm a coluna "Unidade" preenchida
+// errado com um número (ex.: "1000") em vez de um texto de unidade (L, kg,
+// un.) — isso não é um bug do app, é dado da planilha, mas exibir "5 1000"
+// confunde mais do que ajuda. Se "Unidade" for puramente numérico, tratamos
+// como se estivesse vazio.
+function unidadeValida(u) {
+  const s = (u || "").toString().trim();
+  if (!s) return "";
+  if (!isNaN(Number(s.replace(",", ".")))) return "";
+  return s;
+}
+
 // Card de "Atividade recente" a partir de uma linha real do Registro de
 // Inventario (não da fila local) — reflete o que foi gravado por qualquer
 // aparelho, ordenado pela coluna "Gravado em" (AF).
@@ -174,7 +186,7 @@ function atividadeCardHtml(row, produtos) {
   const linhasExtra = [];
   if (tipo === "S") {
     const produtoInfo = (produtos || []).find((p) => p["Produto"] === produtoNome);
-    const unidade = produtoInfo?.["Unidade"] || "";
+    const unidade = unidadeValida(produtoInfo?.["Unidade"]);
     linhasExtra.push(["Volume aplicado", `${formatNumero(row["Volume Calda"])} L`]); // coluna J
     linhasExtra.push(["Qtde. usada", `${formatNumero(row["Qtde."])}${unidade ? " " + unidade : ""}`]); // coluna K
     if (row["Total Saida"] !== undefined && row["Total Saida"] !== null && row["Total Saida"] !== "") {

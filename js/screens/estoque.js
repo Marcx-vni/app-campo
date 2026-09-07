@@ -37,7 +37,7 @@ const ScreenEstoque = {
           <div class="estoque-item-nome">${escapeHtml(p["Produto"])}</div>
           <div class="estoque-item-categoria">${escapeHtml(nomeGrupo(p))}${p["Ctr. Estoque Minimo"] ? ` · Ctr. mín. ${escapeHtml(String(p["Ctr. Estoque Minimo"]))}` : ""}</div>
         </div>
-        <div class="estoque-item-saldo">${escapeHtml(formatNumeroEstoque(p["Estoque"]))} ${escapeHtml(p["Unidade"] || "")}</div>
+        <div class="estoque-item-saldo">${escapeHtml(formatNumeroEstoque(p["Estoque"]))} ${escapeHtml(unidadeValida(p["Unidade"]))}</div>
       </div>`;
     };
 
@@ -45,7 +45,7 @@ const ScreenEstoque = {
     // soma o saldo ("120 L"); senão, como somar unidades diferentes não faz
     // sentido, mostra só a quantidade de produtos.
     const resumoGrupoHtml = (itens) => {
-      const unidades = new Set(itens.map((p) => (p["Unidade"] || "").trim()).filter(Boolean));
+      const unidades = new Set(itens.map((p) => unidadeValida(p["Unidade"])).filter(Boolean));
       if (unidades.size === 1) {
         const total = itens.reduce((soma, p) => soma + (Number(p["Estoque"]) || 0), 0);
         return `${formatNumeroEstoque(total)} ${[...unidades][0]}`;
