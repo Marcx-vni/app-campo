@@ -41,7 +41,7 @@ const ScreenFileSelector = {
       <div class="login-box" style="margin: 40px auto; max-width: 420px;">
         <h1 style="font-size:18px;">Escolha o arquivo</h1>
         <p class="muted">Não encontrei a planilha automaticamente. Busque pelo nome abaixo:</p>
-        <input type="search" id="busca-arquivo" placeholder="Buscar por nome (ex: Controle Sitio)" value="Controle Sitio EPI" style="margin-bottom:10px;" />
+        <input type="search" id="busca-arquivo" placeholder="Buscar por nome (ex: Controle Sitio)" value="Controle Sitio" style="margin-bottom:10px;" />
         <button id="btn-buscar-arquivo" class="btn btn-primary btn-block">Buscar</button>
         <div id="resultado-arquivos" style="margin-top:16px; text-align:left;"></div>
         <p id="erro-arquivo" class="error-text"></p>

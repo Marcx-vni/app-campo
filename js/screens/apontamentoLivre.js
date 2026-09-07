@@ -14,7 +14,7 @@ const BLOCO_SUBTITULOS = {
 // "Uso" é o nome da coluna na planilha (não muda — é a chave de dados usada
 // em toda a validação/gravação), mas na tela é mais intuitivo chamar de
 // "Aplicação", que é o que a pessoa de campo realmente está fazendo.
-const BLOCO_LABELS = { Uso: "Aplicação", Ferti: "Fertirrigação", Venda: "Venda", Compra: "Compra" };
+const BLOCO_LABELS = { Uso: "Aplicação", Ferti: "Fertirrig.", Venda: "Venda", Compra: "Compra" };
 const BLOCO_ICONES = { Uso: "🧪", Ferti: "💧", Venda: "💰", Compra: "🛒" };
 
 const ScreenApontamentoLivre = {
@@ -29,7 +29,7 @@ const ScreenApontamentoLivre = {
         ${["Uso", "Ferti", "Venda", "Compra"]
           .map(
             (b) =>
-              `<div class="bloco-tab ${b === this.bloco ? "active" : ""}" data-bloco="${b}">${BLOCO_ICONES[b]} ${BLOCO_LABELS[b]}</div>`
+              `<div class="bloco-tab ${b === this.bloco ? "active" : ""}" data-bloco="${b}"><span class="bloco-tab-icone">${BLOCO_ICONES[b]}</span><span class="bloco-tab-label">${BLOCO_LABELS[b]}</span></div>`
           )
           .join("")}
       </div>
