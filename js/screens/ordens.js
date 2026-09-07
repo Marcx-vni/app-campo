@@ -100,7 +100,7 @@ const ScreenOrdens = {
         atividadeList.innerHTML = `<div class="empty-state">Nenhum apontamento lançado ainda.</div>`;
         return;
       }
-      atividadeList.innerHTML = recentes.map((row) => atividadeCardHtml(row)).join("");
+      atividadeList.innerHTML = recentes.map((row) => atividadeCardHtml(row, produtos)).join("");
     })();
 
     const minhas = ordens
@@ -154,7 +154,9 @@ function formatMoeda(valor) {
 // Card de "Atividade recente" a partir de uma linha real do Registro de
 // Inventario (não da fila local) — reflete o que foi gravado por qualquer
 // aparelho, ordenado pela coluna "Gravado em" (AF).
-function atividadeCardHtml(row) {
+// `produtos` (Tabela613) é usado só pra achar a unidade (kg/L/un) do produto
+// consumido, nas linhas de uso (S).
+function atividadeCardHtml(row, produtos) {
   const tipo = row["Tipo Movimentação"];
   const info = TIPO_MOVIMENTACAO_INFO[tipo] || { icone: "📋", cor: "atividade-icone-verde" };
   const isCompra = tipo === "E";
@@ -162,18 +164,21 @@ function atividadeCardHtml(row) {
   const complemento = isCompra ? produtoNome : row["Estufa"] || "";
   const pessoa = isCompra ? row["Fornecedor"] || "" : row["Meeiro"] || "";
 
-  let totalLabel = null;
-  let totalValor = null;
+  // Linhas extras de detalhe, além de Produto: variam por tipo de movimentação.
+  const linhasExtra = [];
   if (tipo === "S") {
-    totalLabel = "Qtde. aplicada";
-    totalValor = `${Number(row["Volume Calda"]) || 0} L`;
+    const produtoInfo = (produtos || []).find((p) => p["Produto"] === produtoNome);
+    const unidade = produtoInfo?.["Unidade"] || "";
+    linhasExtra.push(["Volume aplicado", `${Number(row["Volume Calda"]) || 0} L`]);
+    linhasExtra.push(["Qtde. usada", `${Number(row["Qtde."]) || 0}${unidade ? " " + unidade : ""}`]); // coluna K
+    if (row["Total Saida"] !== undefined && row["Total Saida"] !== null && row["Total Saida"] !== "") {
+      linhasExtra.push(["Total", formatMoeda(row["Total Saida"])]); // coluna U
+    }
   } else if (tipo === "V") {
-    totalLabel = "Total da venda";
-    totalValor = formatMoeda(row["Total Venda"]);
+    linhasExtra.push(["Total da venda", formatMoeda(row["Total Venda"])]);
   } else if (tipo === "E") {
     const total = (Number(row["Qtde."]) || 0) * (Number(row["Valor Entrada"]) || 0);
-    totalLabel = "Total gasto";
-    totalValor = formatMoeda(total);
+    linhasExtra.push(["Total gasto", formatMoeda(total)]);
   }
 
   return `
@@ -186,7 +191,7 @@ function atividadeCardHtml(row) {
         </div>
       </div>
       ${!isCompra ? `<div class="card-row"><span>Produto</span><span>${escapeHtml(produtoNome)}</span></div>` : ""}
-      ${totalLabel ? `<div class="card-row"><span>${totalLabel}</span><span>${escapeHtml(totalValor)}</span></div>` : ""}
+      ${linhasExtra.map(([label, valor]) => `<div class="card-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(String(valor))}</span></div>`).join("")}
     </div>`;
 }
 
