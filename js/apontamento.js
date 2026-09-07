@@ -17,13 +17,40 @@ const APONTAMENTOS_COLUMNS = [
 ];
 
 // Colunas que a PLANILHA calcula sozinha — o app nunca envia valor nelas.
+// "Meeiro", "Estufa" e "Tipo" SAÍRAM daqui de propósito: o app já tem essas listas
+// carregadas em memória (mesmos dados usados pra validar antes de enviar), então
+// preencherNomesCalculados() manda o valor pronto em vez de depender de uma fórmula
+// de VLOOKUP rodando de novo pra cada linha nova — menos fórmula, planilha mais leve.
 const COMPUTED_COLUMNS = new Set([
-  "Seq", "Meeiro", "Código Produto", "Tipo", "Tipo Movimentação", "Total Produto",
+  "Seq", "Código Produto", "Tipo Movimentação", "Total Produto",
   "Plantio", "Valor Total", "Venda Líquida", "Seq Inventario", "Validação", "Total Ferti",
 ]);
-// "Estufa" (nome) também é calculada, exceto que ainda não está na lista acima — adicionar:
-COMPUTED_COLUMNS.add("Estufa");
 COMPUTED_COLUMNS.add("Dosagem ML/20LT"); // calculada, a menos que "Alterar dosagem para" seja usada
+
+// Preenche "Meeiro", "Estufa" e "Tipo" a partir das listas já carregadas (lookups),
+// espelhando os VLOOKUPs que a planilha faria sozinha — assim o app manda o valor
+// pronto e a planilha não precisa recalcular isso a cada apontamento novo.
+// Quando não encontra (ex.: produto de Venda que só existe na ProdVenda, não na
+// Tabela613), deixa em branco de propósito: cai de volta pra fórmula da planilha,
+// que vai continuar acusando "Produto inexistente" nesse caso, como já acontecia.
+function preencherNomesCalculados(fields, lookups) {
+  if (!lookups) return;
+  if (fields["Código Meeiro"]) {
+    const m = lookups.meeiros.find((x) => String(x.__cod) === String(fields["Código Meeiro"]));
+    if (m) fields["Meeiro"] = m["Meeiro"];
+  }
+  if (fields["Código Estufa"]) {
+    const e = lookups.estufas.find((x) => String(x.__cod) === String(fields["Código Estufa"]));
+    if (e) fields["Estufa"] = e["Estufa"];
+  }
+  if (fields["Produto"]) {
+    // Na planilha, a coluna "Tipo" (classificação: DEFENSIVO/FOLIARES/FERTIRRIGACAO...)
+    // vem da Tabela613 (Cadastro de Produtos E Estoque), numa coluna cujo cabeçalho
+    // é só um espaço em branco (" ") — herdado assim do arquivo original do usuário.
+    const p = lookups.produtos.find((x) => x["Produto"] === fields["Produto"]);
+    if (p && p[" "] !== undefined) fields["Tipo"] = p[" "];
+  }
+}
 
 // Converte uma data JS (ou string yyyy-mm-dd) para o serial numérico do Excel.
 // A API do Excel aceita string ISO também, mas serial evita ambiguidade de fuso/formatação.

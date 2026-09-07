@@ -185,6 +185,8 @@ const ScreenApontamentoLivre = {
         fields["Nota Fiscal"] = form.querySelector("#f-nota-fiscal").value || null;
       }
 
+      preencherNomesCalculados(fields, lookups);
+
       const erro = validateBeforeSend(fields, lookups);
       if (erro) {
         showToast(`Não foi possível enviar: ${erro}`);
