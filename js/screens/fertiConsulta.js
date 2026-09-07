@@ -29,12 +29,15 @@ const ScreenFertiConsulta = {
         <div id="ferti-limpar-filtros" class="link-acao">Limpar filtros</div>
       </div>
       <div class="ferti-agrupar-bar">
-        <div id="btn-agrupar-toggle" class="link-acao">🔗 Agrupar por estufa e enviar</div>
-        <div id="ferti-agrupar-selecao" class="ferti-agrupar-selecao" hidden>
+        <label class="ferti-marcar-todos">
+          <input type="checkbox" id="chk-marcar-todos" />
+          <span>Marcar todos</span>
+          <span class="ferti-agrupar-separador">•</span>
           <span id="ferti-agrupar-contagem">0 selecionados</span>
-          <div id="btn-agrupar-marcar-tudo" class="link-acao">Marcar tudo</div>
-          <button type="button" id="btn-agrupar-enviar" class="btn-compartilhar btn-compartilhar-inline">📲 Enviar agrupado</button>
-          <div id="btn-agrupar-cancelar" class="link-acao">Cancelar</div>
+        </label>
+        <div class="ferti-agrupar-acoes">
+          <button type="button" id="btn-agrupar-enviar" class="btn-agrupar-enviar">➤ Enviar agrupado</button>
+          <div id="btn-agrupar-cancelar" class="ferti-agrupar-cancelar" title="Limpar seleção">✕</div>
         </div>
       </div>
       <div id="ferti-consulta-list">Carregando...</div>
@@ -46,17 +49,16 @@ const ScreenFertiConsulta = {
     const meeiroSelect = container.querySelector("#filtro-meeiro");
     const dataDeInput = container.querySelector("#filtro-data-de");
     const dataAteInput = container.querySelector("#filtro-data-ate");
-    const toggleBtn = container.querySelector("#btn-agrupar-toggle");
-    const barSelecao = container.querySelector("#ferti-agrupar-selecao");
+    const chkMarcarTodos = container.querySelector("#chk-marcar-todos");
     const contagemEl = container.querySelector("#ferti-agrupar-contagem");
 
-    // Estado da seleção pra agrupar — só existe enquanto "modo agrupar" está
-    // ativo. Guardado fora do renderList pra sobreviver a um re-render
-    // causado pelos filtros (busca/estufa/meeiro/data) enquanto a pessoa
-    // seleciona. `ultimosFiltrados` guarda o resultado do último renderList,
-    // pra "Marcar tudo" saber exatamente quais cards estão visíveis agora
-    // (sem recalcular o filtro de novo).
-    let modoAgrupar = false;
+    // Seleção pra agrupar: cada card sempre tem sua própria caixinha (não
+    // existe mais um "modo" separado pra ligar/desligar). O checkbox
+    // "Marcar todos" da barra é só um atalho: marcado, seleciona tudo que
+    // está visível agora (respeitando os filtros); clicado de novo (ele já
+    // marcado) limpa a seleção inteira e volta pro estado 1 — selecionar
+    // item a item pelos cards. O rótulo "Marcar todos" nunca muda pra
+    // "Desmarcar" nem nada parecido, mesmo com tudo selecionado.
     const selecionados = new Set();
     let ultimosFiltrados = [];
 
@@ -95,16 +97,12 @@ const ScreenFertiConsulta = {
       const temDat = r["D.A.T"] !== undefined && r["D.A.T"] !== null && r["D.A.T"] !== "";
       return `
         <div class="card card-ferti">
-          ${
-            modoAgrupar
-              ? `<label class="ferti-checkbox">
-                   <input type="checkbox" class="ferti-select" data-idx="${r.__rowIndex}" ${
-                    selecionados.has(String(r.__rowIndex)) ? "checked" : ""
-                  } />
-                   Selecionar pra agrupar
-                 </label>`
-              : ""
-          }
+          <label class="ferti-checkbox">
+            <input type="checkbox" class="ferti-select" data-idx="${r.__rowIndex}" ${
+              selecionados.has(String(r.__rowIndex)) ? "checked" : ""
+            } />
+            Selecionar pra agrupar
+          </label>
           <div class="atividade-card-topo">
             <div class="atividade-icone atividade-icone-ferti">💧</div>
             <div style="flex:1; min-width:0;">
@@ -183,30 +181,33 @@ const ScreenFertiConsulta = {
       });
     };
 
+    // Reflete a seleção atual na contagem e sincroniza o checkbox "Marcar
+    // todos" — ele aparece marcado quando (e só quando) tudo que está
+    // visível agora já foi selecionado, seja pelo próprio checkbox seja
+    // marcando os cards um a um.
     const atualizarContagemSelecao = () => {
       contagemEl.textContent = `${selecionados.size} selecionado${selecionados.size === 1 ? "" : "s"}`;
+      chkMarcarTodos.checked = ultimosFiltrados.length > 0 && selecionados.size === ultimosFiltrados.length;
     };
 
-    // Alterna o "modo agrupar": mostra uma caixinha de seleção em cada card
-    // e a barra com o botão de enviar. Sair do modo limpa a seleção.
-    toggleBtn.addEventListener("click", () => {
-      modoAgrupar = !modoAgrupar;
-      selecionados.clear();
-      toggleBtn.textContent = modoAgrupar ? "✖️ Cancelar seleção" : "🔗 Agrupar por estufa e enviar";
-      barSelecao.hidden = !modoAgrupar;
+    // Checkbox "Marcar todos": marcá-lo seleciona tudo que está visível
+    // agora (respeitando os filtros de estufa/meeiro/data/busca); clicar de
+    // novo nele já marcado desmarca tudo e volta pro estado 1 (seleção
+    // individual, item a item, pelos cards). O texto "Marcar todos" nunca
+    // muda, independente do estado.
+    chkMarcarTodos.addEventListener("change", () => {
+      if (chkMarcarTodos.checked) {
+        ultimosFiltrados.forEach((r) => selecionados.add(String(r.__rowIndex)));
+      } else {
+        selecionados.clear();
+      }
       atualizarContagemSelecao();
       renderList();
     });
 
+    // "✕" limpa a seleção inteira sem sair da tela nem mexer nos filtros.
     container.querySelector("#btn-agrupar-cancelar").addEventListener("click", () => {
-      toggleBtn.click();
-    });
-
-    // Marca todos os cards que estão visíveis AGORA (respeitando os filtros
-    // de estufa/meeiro/data/busca) — evita ter que marcar card por card
-    // quando já filtrou pela estufa que quer agrupar.
-    container.querySelector("#btn-agrupar-marcar-tudo").addEventListener("click", () => {
-      ultimosFiltrados.forEach((r) => selecionados.add(String(r.__rowIndex)));
+      selecionados.clear();
       atualizarContagemSelecao();
       renderList();
     });

@@ -139,6 +139,7 @@ const ScreenApontamentoLivre = {
         <input type="number" step="0.01" id="f-quantidade" required />
         <label>💲 Valor unitário</label>
         <input type="number" step="0.01" id="f-valor-unitario" required />
+        <div id="compra-ultimo-valor" class="produto-saldo-info"></div>
         <div id="compra-total-calc" class="total-calc-info">Total da compra: —</div>
         <label>🏭 Fornecedor</label>
         <div id="f-fornecedor-combo"></div>
@@ -170,15 +171,60 @@ const ScreenApontamentoLivre = {
     `;
 
     const produtoSaldoInfo = form.querySelector("#produto-saldo-info");
+    const compraUltimoValorEl = form.querySelector("#compra-ultimo-valor");
+
+    // Último valor pago pelo produto (aba "Registro de Inventario", só
+    // entradas de fornecedor) — carregado sob demanda na primeira vez que a
+    // pessoa escolhe um produto na Compra, e reaproveitado depois (a tabela
+    // pode ser grande, então evita reler a cada troca de produto). Guarda só
+    // o valor mais recente por produto, usando "Gravado em" pra desempate.
+    let ultimoValorPorProduto = null;
+    const carregarUltimoValorPorProduto = async () => {
+      if (ultimoValorPorProduto) return ultimoValorPorProduto;
+      ultimoValorPorProduto = {};
+      try {
+        const registros = await readTable(TABLES.registroInventario);
+        registros.forEach((r) => {
+          if (r["Tipo Movimentação"] !== "E") return;
+          const produto = r["Descricao"];
+          if (!produto) return;
+          const gravado = Number(r["Gravado em"]) || 0;
+          const atual = ultimoValorPorProduto[produto];
+          if (!atual || gravado >= atual.gravado) {
+            ultimoValorPorProduto[produto] = { valor: Number(r["Valor Entrada"]) || 0, gravado };
+          }
+        });
+      } catch (e) {
+        console.error("Falha ao carregar último valor de compra:", e);
+      }
+      return ultimoValorPorProduto;
+    };
+
     const produtoCombo = criarComboBusca(form.querySelector("#f-produto-combo"), produtoOpcoes, {
       placeholder: "Buscar produto...",
-      onChange: produtoSaldoInfo
-        ? (opcao) => {
-            produtoSaldoInfo.textContent = opcao
-              ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}${opcao.unidade ? " " + opcao.unidade : ""}`
-              : "";
-          }
-        : undefined,
+      onChange:
+        produtoSaldoInfo || compraUltimoValorEl
+          ? async (opcao) => {
+              if (produtoSaldoInfo) {
+                produtoSaldoInfo.textContent = opcao
+                  ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}${opcao.unidade ? " " + opcao.unidade : ""}`
+                  : "";
+              }
+              if (compraUltimoValorEl) {
+                if (!opcao) {
+                  compraUltimoValorEl.textContent = "";
+                  return;
+                }
+                compraUltimoValorEl.textContent = "Verificando último valor comprado...";
+                const mapa = await carregarUltimoValorPorProduto();
+                const info = mapa[opcao.value];
+                compraUltimoValorEl.textContent =
+                  info && info.valor > 0
+                    ? `💲 Último valor comprado: ${formatMoeda(info.valor)}`
+                    : "Nenhuma compra anterior encontrada pra esse produto.";
+              }
+            }
+          : undefined,
     });
 
     let meeiroCombo = null;
