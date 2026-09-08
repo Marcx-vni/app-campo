@@ -20,6 +20,77 @@ function getMeeiroSelecionado() {
   return localStorage.getItem(MEEIRO_STORAGE_KEY);
 }
 
+const DIAS_SEMANA_ABREV = ["dom.", "seg.", "ter.", "qua.", "qui.", "sex.", "sáb."];
+
+// Card de "Previsão do tempo" da tela Início — condição atual (mesma fonte
+// do cabeçalho, Open-Meteo) + os próximos 7 dias em tiras horizontais
+// (ícone + máxima/mínima), pra dar uma ideia da semana sem precisar sair do
+// app. CLIMA_LATITUDE/CLIMA_LONGITUDE e iconeClima() são definidos em
+// app.js — mesmo ponto fixo (Venda Nova do Imigrante/ES) usado no cabeçalho.
+// Falha silenciosa: é só um complemento informativo, não pode travar a tela.
+async function carregarPrevisaoHome(container) {
+  const el = container.querySelector("#previsao-card");
+  if (!el) return;
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${CLIMA_LATITUDE}&longitude=${CLIMA_LONGITUDE}` +
+      `&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+      `&timezone=America%2FSao_Paulo&forecast_days=7`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const dados = await res.json();
+    const atual = dados.current || {};
+    const diario = dados.daily || {};
+    const dias = (diario.time || []).map((dataStr, i) => ({
+      data: dataStr,
+      codigo: diario.weather_code?.[i],
+      max: diario.temperature_2m_max?.[i],
+      min: diario.temperature_2m_min?.[i],
+      chuva: diario.precipitation_probability_max?.[i],
+    }));
+
+    const chuvaHoje = dias[0]?.chuva;
+    el.innerHTML = `
+      <div class="previsao-atual">
+        <div class="previsao-atual-icone">${iconeClima(atual.weather_code)}</div>
+        <div class="previsao-atual-temp">${
+          atual.temperature_2m !== undefined ? Math.round(atual.temperature_2m) : "—"
+        }°C</div>
+        <div class="previsao-atual-detalhes">
+          ${chuvaHoje !== undefined ? `<div>💧 Chuva: ${Math.round(chuvaHoje)}%</div>` : ""}
+          ${
+            atual.relative_humidity_2m !== undefined
+              ? `<div>💦 Umidade: ${Math.round(atual.relative_humidity_2m)}%</div>`
+              : ""
+          }
+          ${atual.wind_speed_10m !== undefined ? `<div>🌬️ Vento: ${Math.round(atual.wind_speed_10m)} km/h</div>` : ""}
+        </div>
+      </div>
+      <div class="previsao-dias">
+        ${dias
+          .map((d, i) => {
+            const dt = new Date(`${d.data}T12:00:00`);
+            const label = i === 0 ? "Hoje" : DIAS_SEMANA_ABREV[dt.getDay()];
+            return `
+              <div class="previsao-dia">
+                <div class="previsao-dia-label">${label}</div>
+                <div class="previsao-dia-icone">${iconeClima(d.codigo)}</div>
+                <div class="previsao-dia-temps">
+                  <span>${d.max !== undefined ? Math.round(d.max) : "—"}°</span>
+                  <span class="previsao-dia-min">${d.min !== undefined ? Math.round(d.min) : "—"}°</span>
+                </div>
+              </div>`;
+          })
+          .join("")}
+      </div>
+    `;
+  } catch (e) {
+    console.warn("Falha ao carregar previsão do tempo (não crítico):", e);
+    el.innerHTML = `<div class="previsao-carregando">Não foi possível carregar a previsão do tempo.</div>`;
+  }
+}
+
 const ScreenHome = {
   async render(container) {
     container.innerHTML = `
@@ -40,6 +111,11 @@ const ScreenHome = {
           <div class="resumo-valor resumo-valor-pequeno" id="resumo-valor-estoque">—</div>
           <div class="resumo-label">Valor em estoque</div>
         </div>
+      </div>
+
+      <div class="section-title" style="margin-top:18px;">Previsão do tempo</div>
+      <div class="previsao-card" id="previsao-card">
+        <div class="previsao-carregando">Carregando previsão do tempo...</div>
       </div>
 
       <div class="section-title" style="margin-top:18px;">Ações rápidas</div>
@@ -65,6 +141,8 @@ const ScreenHome = {
       el.addEventListener("click", () => navigate(el.dataset.route));
     });
     container.querySelector("#atividade-ver-tudo").addEventListener("click", () => navigate("fila"));
+
+    carregarPrevisaoHome(container); // não bloqueia a tela — se falhar, fica só sem o card
 
     // Nunca deixa a tela travada em "Carregando..." pra sempre sem explicação:
     // se a busca dos dados da planilha falhar (ex.: arquivo movido/renomeado
