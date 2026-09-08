@@ -657,6 +657,62 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .ferti-checkbox input { width: auto; margin: 0; }
 
+/* --- Financeiro (Contas a pagar) --- */
+.card-financeiro { border-left: 3px solid var(--border); }
+.card-financeiro.financeiro-vencida { border-left-color: var(--red); }
+.card-financeiro.financeiro-aberto { border-left-color: var(--amber); }
+.card-financeiro.financeiro-pago { border-left-color: var(--sucesso); }
+.financeiro-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: 20px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.financeiro-badge-vencida { color: var(--red); background: #F8E1DA; }
+.financeiro-badge-aberto { color: var(--amber); background: #F6E9D6; }
+.financeiro-badge-pago { color: var(--verde); background: #E3F2E1; }
+.btn-pagar {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--verde);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-pagar:active { background: var(--verde-medio); }
+.financeiro-pagamento-form {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--gray-bg);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+}
+.financeiro-pagamento-form label { margin: 10px 0 6px; }
+.financeiro-pagamento-form label:first-child { margin-top: 0; }
+.financeiro-valor-opcoes { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.financeiro-valor-opcoes label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  font-size: 12.5px;
+  color: var(--text);
+  margin: 0;
+}
+.financeiro-valor-opcoes input[type="radio"] { width: auto; margin: 0; }
+.financeiro-pagamento-acoes { display: flex; gap: 8px; margin-top: 12px; }
+.financeiro-pagamento-acoes .btn { flex: 1; margin-top: 0; }
+
 /* --- Estoque: card com barra colorida à esquerda + saldo em destaque --- */
 .estoque-item {
   display: flex;

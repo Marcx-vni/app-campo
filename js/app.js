@@ -9,6 +9,7 @@ const routes = {
   ordem: (el, params) => ScreenOrdemCard.render(el, params.id),
   apontamento: (el) => ScreenApontamentoLivre.render(el),
   estoque: (el) => ScreenEstoque.render(el),
+  financeiro: (el) => ScreenFinanceiro.render(el),
   fila: (el) => ScreenFila.render(el),
 };
 

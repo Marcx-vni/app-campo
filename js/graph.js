@@ -172,6 +172,20 @@ async function addTableRow(tableName, valuesArray) {
   return result.index;
 }
 
+// Atualiza uma linha JÁ EXISTENTE de uma tabela (ex.: marcar uma conta do
+// Financeiro como paga). `valuesArray` precisa ter TODAS as colunas da
+// tabela, na mesma ordem — é assim que o Graph espera pra um PATCH de linha
+// (não dá pra mandar só as células que mudaram). Por isso quem chama isso
+// deve começar a partir da linha atual (lida com readTableRow) e só trocar
+// os campos que precisam mudar, preservando o resto — ver montarLinhaPatch
+// em apontamento.js.
+async function updateTableRow(tableName, rowIndex, valuesArray) {
+  await graphFetch(`/tables('${tableName}')/rows/itemAt(index=${rowIndex})`, {
+    method: "PATCH",
+    body: JSON.stringify({ values: [valuesArray] }),
+  });
+}
+
 // Força o Excel Online a recalcular fórmulas (colunas calculadas como AF, AE, P, S, etc.)
 // antes de reler a linha. Sem isso a leitura pode trazer o valor "stale".
 async function recalculateWorkbook() {

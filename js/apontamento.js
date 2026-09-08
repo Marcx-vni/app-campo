@@ -45,6 +45,20 @@ function montarLinha(colunas, computadas, valores) {
   });
 }
 
+// Monta o array completo pra um UPDATE de linha (updateTableRow em graph.js)
+// a partir da linha JÁ LIDA da planilha (`linhaAtual`, no formato que
+// readTable/readTableRow devolvem — objeto por cabeçalho + __rowIndex) e um
+// objeto `patch` só com os campos que precisam mudar. Os demais campos são
+// preservados como estavam — essencial porque o Graph substitui a linha
+// inteira no PATCH, não só as células informadas.
+function montarLinhaPatch(colunas, linhaAtual, patch) {
+  return colunas.map((col) => {
+    if (Object.prototype.hasOwnProperty.call(patch, col)) return patch[col] ?? null;
+    const v = linhaAtual[col];
+    return v === undefined ? null : v;
+  });
+}
+
 // Converte data JS/string para o serial numérico do Excel (evita ambiguidade de fuso).
 function toExcelSerial(dateInput) {
   const d = typeof dateInput === "string" ? new Date(dateInput + "T00:00:00") : dateInput;
