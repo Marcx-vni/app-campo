@@ -658,10 +658,64 @@ textarea { resize: vertical; min-height: 60px; }
 .ferti-checkbox input { width: auto; margin: 0; }
 
 /* --- Financeiro (Contas a pagar) --- */
-.card-financeiro { border-left: 3px solid var(--border); }
+.sechead { font-size: 12px; color: var(--muted); margin: 16px 0 8px; }
+
+/* KPIs (grade 2x2) */
+.financeiro-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.financeiro-kpi {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.financeiro-kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.financeiro-kpi-valor { font-size: 17px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.financeiro-kpi-valor.financeiro-kpi-vencido { color: var(--red); }
+.financeiro-kpi-valor.financeiro-kpi-semana { color: var(--amber); }
+.financeiro-kpi-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+/* Legenda do gráfico + gráfico */
+.financeiro-legenda-item { display: inline-flex; align-items: center; gap: 3px; }
+.financeiro-legenda-dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.financeiro-chart-wrap { position: relative; height: 150px; margin-bottom: 4px; }
+
+/* Ranking de fornecedores com maior exposição */
+.financeiro-ranking-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.financeiro-ranking-nome {
+  width: 110px;
+  flex-shrink: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.financeiro-ranking-bar { height: 7px; border-radius: 4px; background: var(--amber); flex-shrink: 0; }
+.financeiro-ranking-valor { font-size: 12px; font-weight: 500; margin-left: auto; }
+
+/* Chips de filtro ("Próximos vencimentos") */
+.financeiro-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px; }
+.chip {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip.active { background: var(--verde); border-color: var(--verde); color: white; }
+
+/* Card de título (expansível) */
+.card-financeiro { border-left: 3px solid var(--border); padding: 0; overflow: hidden; }
 .card-financeiro.financeiro-vencida { border-left-color: var(--red); }
 .card-financeiro.financeiro-aberto { border-left-color: var(--amber); }
-.card-financeiro.financeiro-pago { border-left-color: var(--sucesso); }
+.financeiro-chead { padding: 14px; cursor: pointer; }
+.financeiro-chead-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.financeiro-chead-fornecedor { font-size: 15px; font-weight: 600; color: var(--text); }
 .financeiro-badge {
   display: inline-block;
   font-size: 10px;
@@ -670,27 +724,33 @@ textarea { resize: vertical; min-height: 60px; }
   padding: 2px 7px;
   border-radius: 20px;
   vertical-align: middle;
-  margin-left: 4px;
+  white-space: nowrap;
 }
 .financeiro-badge-vencida { color: var(--red); background: #F8E1DA; }
 .financeiro-badge-aberto { color: var(--amber); background: #F6E9D6; }
-.financeiro-badge-pago { color: var(--verde); background: #E3F2E1; }
+.financeiro-detail { padding: 0 14px 14px; }
+.drow { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: var(--muted); }
+.drow span:last-child { color: var(--text); font-weight: 500; }
+.dashed { border-top: 1px dashed var(--border); margin: 8px 0; }
+.financeiro-totalrow { display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; margin-bottom: 12px; }
 .btn-pagar {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   width: 100%;
-  margin-top: 10px;
-  padding: 9px 0;
+  padding: 12px;
   border: none;
   border-radius: 10px;
   background: var(--verde);
   color: white;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 .btn-pagar:active { background: var(--verde-medio); }
 .financeiro-pagamento-form {
-  margin-top: 10px;
+  margin-top: 4px;
   padding: 12px;
   background: var(--gray-bg);
   border-radius: 10px;
