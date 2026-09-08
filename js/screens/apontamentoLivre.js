@@ -17,6 +17,19 @@ const BLOCO_SUBTITULOS = {
 const BLOCO_LABELS = { Uso: "Aplicação", Ferti: "Fertirrig.", Venda: "Venda", Compra: "Compra" };
 const BLOCO_ICONES = { Uso: "🧪", Ferti: "💧", Venda: "💰", Compra: "🛒" };
 
+// Lembrete dos últimos valores escolhidos — em Ferti/Aplicação/Venda quase
+// sempre é a mesma estufa/meeiro em sequência (várias aplicações seguidas no
+// mesmo lugar), e em Compra costuma ser o mesmo fornecedor/nota fiscal pra
+// vários produtos da mesma entrega. Só conveniência de preenchimento, sem
+// relação com login — a pessoa sempre pode trocar antes de enviar.
+const ESTUFA_STORAGE_KEY = "app_campo_estufa_codigo";
+const FORNECEDOR_STORAGE_KEY = "app_campo_fornecedor";
+const NOTA_FISCAL_STORAGE_KEY = "app_campo_nota_fiscal";
+
+function getEstufaSelecionada() {
+  return localStorage.getItem(ESTUFA_STORAGE_KEY);
+}
+
 const ScreenApontamentoLivre = {
   bloco: "Uso",
 
@@ -146,7 +159,7 @@ const ScreenApontamentoLivre = {
         <label>📅 Data de vencimento (opcional)</label>
         <input type="date" id="f-vencimento" />
         <label>🧾 Nota fiscal (opcional)</label>
-        <input type="text" id="f-nota-fiscal" />
+        <input type="text" id="f-nota-fiscal" value="${escapeHtml(localStorage.getItem(NOTA_FISCAL_STORAGE_KEY) || "")}" />
       `;
     }
 
@@ -302,6 +315,7 @@ const ScreenApontamentoLivre = {
       });
       estufaCombo = criarComboBusca(form.querySelector("#f-estufa-combo"), estufaOpcoes, {
         placeholder: "Buscar estufa...",
+        valorInicial: getEstufaSelecionada(),
         onChange:
           this.bloco === "Ferti"
             ? () => {
@@ -313,6 +327,7 @@ const ScreenApontamentoLivre = {
     } else {
       fornecedorCombo = criarComboBusca(form.querySelector("#f-fornecedor-combo"), fornecedorOpcoes, {
         placeholder: "Buscar fornecedor...",
+        valorInicial: localStorage.getItem(FORNECEDOR_STORAGE_KEY),
       });
     }
 
@@ -344,6 +359,9 @@ const ScreenApontamentoLivre = {
         fields["Código Meeiro"] = meeiroMatch ? meeiroMatch.__cod : meeiroVal;
         if (fields["Código Meeiro"] !== undefined && fields["Código Meeiro"] !== null && fields["Código Meeiro"] !== "") {
           localStorage.setItem(MEEIRO_STORAGE_KEY, fields["Código Meeiro"]);
+        }
+        if (fields["Código Estufa"] !== undefined && fields["Código Estufa"] !== null && fields["Código Estufa"] !== "") {
+          localStorage.setItem(ESTUFA_STORAGE_KEY, fields["Código Estufa"]);
         }
       }
       fields["Produto"] = produtoCombo.getValue();
@@ -386,6 +404,8 @@ const ScreenApontamentoLivre = {
         const venc = form.querySelector("#f-vencimento").value;
         fields["Data Vencimento"] = venc || null;
         fields["Nota Fiscal"] = form.querySelector("#f-nota-fiscal").value || null;
+        if (fields["Fornecedor"]) localStorage.setItem(FORNECEDOR_STORAGE_KEY, fields["Fornecedor"]);
+        if (fields["Nota Fiscal"]) localStorage.setItem(NOTA_FISCAL_STORAGE_KEY, fields["Nota Fiscal"]);
       }
 
       const erro = validateBeforeSend(fields, lookups);
