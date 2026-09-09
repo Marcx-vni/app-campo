@@ -81,6 +81,7 @@ const ScreenApontamentoLivre = {
               label: p["Produto"],
               estoque: Number(p["Estoque"]) || 0,
               unidade: unidadeValida(p["Unidade"]),
+              dosagem: Number(p["Dosagem ML/20LT"]) || 0,
             }));
 
     // Estufa/Meeiro/Fornecedor: caixa de busca (mesmo padrão do Produto), não
@@ -112,6 +113,7 @@ const ScreenApontamentoLivre = {
           <input type="number" step="0.01" id="f-quantidade" required />
           <span class="unidade">litros</span>
         </div>
+        <div id="uso-dosagem-cadastrada" class="produto-saldo-info"></div>
         <label>🧪 Informar Dosagem p/ 20L (opcional)</label>
         <input type="number" step="0.01" id="f-dosagem-alterada" placeholder="Deixe em branco pra usar a dosagem cadastrada" />
       `;
@@ -185,6 +187,7 @@ const ScreenApontamentoLivre = {
 
     const produtoSaldoInfo = form.querySelector("#produto-saldo-info");
     const compraUltimoValorEl = form.querySelector("#compra-ultimo-valor");
+    const usoDosagemCadastradaEl = form.querySelector("#uso-dosagem-cadastrada");
 
     // Último valor pago pelo produto (aba "Registro de Inventario", só
     // entradas de fornecedor) — carregado sob demanda na primeira vez que a
@@ -216,11 +219,16 @@ const ScreenApontamentoLivre = {
     const produtoCombo = criarComboBusca(form.querySelector("#f-produto-combo"), produtoOpcoes, {
       placeholder: "Buscar produto...",
       onChange:
-        produtoSaldoInfo || compraUltimoValorEl
+        produtoSaldoInfo || compraUltimoValorEl || usoDosagemCadastradaEl
           ? async (opcao) => {
               if (produtoSaldoInfo) {
                 produtoSaldoInfo.textContent = opcao
                   ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}${opcao.unidade ? " " + opcao.unidade : ""}`
+                  : "";
+              }
+              if (usoDosagemCadastradaEl) {
+                usoDosagemCadastradaEl.textContent = opcao
+                  ? `📏 Dosagem cadastrada 20L - ${formatNumero(opcao.dosagem)}`
                   : "";
               }
               if (compraUltimoValorEl) {
