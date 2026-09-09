@@ -85,7 +85,7 @@ const ScreenFertiConsulta = {
       );
 
     const cardHtml = (r) => {
-      // Arredondado pra centena de grama (a pedido do usuário) — inclusive
+      // Arredondado pro múltiplo de 50 gramas (a pedido do usuário) — inclusive
       // pra lançamentos antigos que ainda tenham valor "quebrado" gravado na
       // planilha. O total é recalculado a partir dos setores já
       // arredondados, em vez de usar a coluna "Total" da planilha, pra

@@ -268,7 +268,7 @@ const ScreenApontamentoLivre = {
         return;
       }
       const dosagem = Number(form.querySelector("#f-dosagem-ferti")?.value) || 0;
-      // Arredondado pra grama inteira aqui também, pra bater com o que
+      // Arredondado pro múltiplo de 50 gramas aqui também, pra bater com o que
       // calcularSetoresFerti vai gravar de fato — senão a prévia mostraria
       // um número e a planilha gravaria outro.
       const qtds = setores.map((s) => arredondarGramasFerti((s.plantas / 1000) * dosagem));
