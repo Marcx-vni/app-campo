@@ -879,12 +879,14 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .meeiro-destaque span:last-child { font-size: 18px; }
 .meeiro-recibo-preview { display: flex; flex-direction: column; gap: 8px; }
-.meeiro-recibo-iframe {
+.meeiro-recibo-paginas { display: flex; flex-direction: column; gap: 10px; }
+.meeiro-recibo-pagina {
   width: 100%;
-  aspect-ratio: 210 / 297;
+  height: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 .meeiro-recibo-abrir {
   align-self: center;

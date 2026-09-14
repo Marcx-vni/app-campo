@@ -229,10 +229,12 @@ const ScreenMeeiro = {
 
         previewEl.innerHTML = `
           <div class="meeiro-recibo-preview">
-            <iframe class="meeiro-recibo-iframe" src="${reciboBlobUrl}" title="Pré-visualização do recibo"></iframe>
+            <div class="meeiro-recibo-paginas" id="meeiro-recibo-paginas"></div>
             <a class="meeiro-recibo-abrir" href="${reciboBlobUrl}" target="_blank" rel="noopener">Abrir recibo em nova aba ↗</a>
           </div>
         `;
+        if (meuRequestId !== reciboRequestId) return;
+        await desenharPaginasRecibo(blob, container.querySelector("#meeiro-recibo-paginas"), () => meuRequestId === reciboRequestId);
       } catch (e) {
         if (meuRequestId !== reciboRequestId) return;
         console.error("Falha ao gerar pré-visualização do recibo:", e);
@@ -278,6 +280,45 @@ function formatDataISOparaBR(iso) {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+}
+
+if (typeof pdfjsLib !== "undefined") {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+// Desenha cada página do PDF (blob) num <canvas> dentro de containerEl, uma
+// embaixo da outra — é como a pré-visualização do recibo do Meeiro aparece
+// na tela. Não usa <iframe> porque celular (principalmente Chrome Android
+// dentro do PWA) não costuma renderizar PDF em iframe de forma confiável, só
+// mostra o ícone genérico do arquivo. aindaValido() é checado entre páginas
+// pra parar de desenhar se a pessoa já trocou de filtro enquanto isso rodava.
+async function desenharPaginasRecibo(blob, containerEl, aindaValido) {
+  if (typeof pdfjsLib === "undefined") {
+    containerEl.innerHTML = `<div class="empty-state">Pré-visualização indisponível (biblioteca de PDF não carregou) — use "Abrir recibo em nova aba".</div>`;
+    return;
+  }
+  const buffer = await blob.arrayBuffer();
+  if (!aindaValido()) return;
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  // Escala pra caber na largura do container, considerando telas retina.
+  const larguraAlvo = Math.min(containerEl.clientWidth || 360, 480) * (window.devicePixelRatio || 1);
+
+  for (let numPagina = 1; numPagina <= pdf.numPages; numPagina++) {
+    if (!aindaValido()) return;
+    const pagina = await pdf.getPage(numPagina);
+    const viewportBase = pagina.getViewport({ scale: 1 });
+    const escala = larguraAlvo / viewportBase.width;
+    const viewport = pagina.getViewport({ scale: escala });
+
+    const canvas = document.createElement("canvas");
+    canvas.className = "meeiro-recibo-pagina";
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    containerEl.appendChild(canvas);
+
+    await pagina.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    if (!aindaValido()) return;
+  }
 }
 
 // Gera o recibo de pagamento ao meeiro em PDF (A4) — cabeçalho, meeiro +
