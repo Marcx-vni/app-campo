@@ -6,9 +6,11 @@
 // Venda (Tipo Movimentação = "V") do meeiro escolhido. O FUNRURAL (1,65%)
 // incide só sobre a venda bruta feita pra cliente "PETERFRUT" — as vendas
 // pra outros clientes (ex.: GOBBI) não entram nessa conta, por decisão do
-// usuário. "Total Líquido" já é (venda bruta − embalagem), que a própria
-// tabela guarda em "Venda Liquida"; o app só soma essa coluna e desconta o
-// FUNRURAL por cima pra chegar no valor que o meeiro efetivamente recebe.
+// usuário, e é calculado e exibido LINHA A LINHA no extrato (zero quando
+// não incide), não mais como um desconto único lá na apuração. "Total
+// Venda Líquida" de cada linha já é (venda bruta − embalagem − FUNRURAL
+// dessa venda); a apuração só soma essa coluna pra chegar no valor que o
+// meeiro efetivamente recebe.
 // ============================================================================
 
 const MEEIRO_FUNRURAL_PERCENTUAL = 0.0165; // 1,65%
@@ -28,6 +30,23 @@ function meeiroValorUnitVenda(r) {
 function meeiroTotalLiquidoLinha(r) {
   const vl = r["Venda Liquida"];
   return vl !== undefined && vl !== null && vl !== "" ? Number(vl) || 0 : Number(r["Total Venda"]) || 0;
+}
+
+// FUNRURAL de UMA venda — só incide sobre venda bruta pro cliente PETERFRUT;
+// pras demais (GOBBI, ZIMBRÃO...) o valor é sempre zero. Exibido linha a
+// linha no extrato (não mais como um desconto único lá na apuração).
+function meeiroFunruralLinha(r) {
+  const cliente = String(r["Cliente"] || "").trim().toUpperCase();
+  if (cliente !== MEEIRO_CLIENTE_FUNRURAL) return 0;
+  return (Number(r["Total Venda"]) || 0) * MEEIRO_FUNRURAL_PERCENTUAL;
+}
+
+// Total líquido de UMA venda já descontando embalagem E FUNRURAL — é essa a
+// coluna "Total Venda Líquida" do extrato, e a soma dela em todas as linhas
+// é o "Total Líquido" da apuração (não precisa mais subtrair o FUNRURAL de
+// novo lá em cima, porque ele já está embutido aqui, linha a linha).
+function meeiroTotalComFunrural(r) {
+  return meeiroTotalLiquidoLinha(r) - meeiroFunruralLinha(r);
 }
 
 const ScreenMeeiro = {
@@ -113,14 +132,10 @@ const ScreenMeeiro = {
 
     const calcularTotais = (vendas) => {
       const totalBruto = vendas.reduce((s, r) => s + (Number(r["Total Venda"]) || 0), 0);
-      const totalLiquidoBruto = vendas.reduce((s, r) => s + meeiroTotalLiquidoLinha(r), 0);
-      const baseFunrural = vendas
-        .filter((r) => String(r["Cliente"] || "").trim().toUpperCase() === MEEIRO_CLIENTE_FUNRURAL)
-        .reduce((s, r) => s + (Number(r["Total Venda"]) || 0), 0);
-      const funrural = baseFunrural * MEEIRO_FUNRURAL_PERCENTUAL;
-      const totalLiquidoFinal = totalLiquidoBruto - funrural;
+      const funrural = vendas.reduce((s, r) => s + meeiroFunruralLinha(r), 0);
+      const totalLiquidoFinal = vendas.reduce((s, r) => s + meeiroTotalComFunrural(r), 0);
       const valorMeeiro = totalLiquidoFinal * (this.percentual / 100);
-      return { totalBruto, baseFunrural, funrural, totalLiquidoFinal, valorMeeiro };
+      return { totalBruto, funrural, totalLiquidoFinal, valorMeeiro };
     };
 
     const renderResumo = (vendas) => {
@@ -136,8 +151,6 @@ const ScreenMeeiro = {
       resumoEl.innerHTML = `
         <div class="card meeiro-resumo">
           <div class="drow"><span>Total de vendas (bruto)</span><span>${formatMoeda(t.totalBruto)}</span></div>
-          <div class="drow"><span>FUNRURAL (1,65% s/ vendas Peterfrut)</span><span class="meeiro-negativo">− ${formatMoeda(t.funrural)}</span></div>
-          <div class="meeiro-linha-sub">Base do cálculo: ${formatMoeda(t.baseFunrural)} em vendas p/ Peterfrut</div>
           <div class="dashed"></div>
           <div class="financeiro-totalrow"><span>Total Líquido</span><span>${formatMoeda(t.totalLiquidoFinal)}</span></div>
           <div class="drow"><span>Percentual do meeiro</span><span>${this.percentual}%</span></div>
@@ -175,13 +188,14 @@ const ScreenMeeiro = {
 
     const linhaHtml = (r) => {
       const embalagem = Number(r["Valor Caixa"]) || 0;
+      const funrural = meeiroFunruralLinha(r);
       return `
         <div class="card meeiro-linha">
           <div class="meeiro-linha-topo"><span>${formatExcelDate(r["Data"])}</span><span>${escapeHtml(r["Cliente"] || "—")}</span></div>
-          <div class="drow"><span>${escapeHtml(r["Descricao"] || "—")}</span><span>${formatMoeda(meeiroTotalLiquidoLinha(r))}</span></div>
+          <div class="drow"><span>${escapeHtml(r["Descricao"] || "—")}</span><span>${formatMoeda(meeiroTotalComFunrural(r))}</span></div>
           <div class="meeiro-linha-sub">Qtde. ${formatNumero(r["Qtde."])} · Vlr. Unit. ${formatMoeda(meeiroValorUnitVenda(r))}${
         embalagem > 0 ? ` · Embalagem ${formatMoeda(embalagem)}/un.` : ""
-      }</div>
+      }${funrural > 0 ? ` · Funrural ${formatMoeda(funrural)}` : ""}</div>
         </div>`;
     };
 
@@ -226,9 +240,10 @@ function formatDataISOparaBR(iso) {
 
 // Gera o recibo de pagamento ao meeiro em PDF (A4) — cabeçalho, meeiro +
 // período, o extrato analítico das vendas em TABELA (uma linha por venda,
-// pra dar pra conferir cada lançamento — pagina automaticamente se não
-// couber numa folha só), a apuração (bruto → FUNRURAL → líquido →
-// percentual → valor a pagar em destaque), o texto de referência do
+// com Funrural na própria coluna — zero quando não incide — e o Total Venda
+// Líquida já descontando embalagem+Funrural dessa linha; pagina
+// automaticamente se não couber numa folha só), a apuração (bruto → líquido
+// → percentual → valor a pagar em destaque), o texto de referência do
 // pagamento e uma única linha de assinatura — a do meeiro selecionado (o
 // recibo é dele assinar; não há segunda via da Peterfrut aqui).
 //
@@ -316,25 +331,37 @@ async function gerarReciboMeeiroPdf(dados) {
   y += 10;
 
   // --- Extrato das vendas, em tabela --------------------------------------
+  // Colunas iguais ao extrato de conferência que o usuário validou: Data,
+  // Cliente, Produto, Qtde., Valor Caixa, Funrural (linha a linha — zero
+  // quando não incide), Preço Venda (unitário), Total Venda (bruto) e Total
+  // Venda Líquida (já descontando embalagem e FUNRURAL dessa linha).
   const colData = { x: 0, w: 16 };
-  const colCliente = { x: 16, w: 30 };
-  const colProduto = { x: 46, w: 64 };
-  const colVlrUnit = { x: 110, w: 24 };
-  const colEmb = { x: 134, w: 20 };
-  const colTotal = { x: 154, w: 26 };
+  const colCliente = { x: 16, w: 22 };
+  const colProduto = { x: 38, w: 34 };
+  const colQtde = { x: 72, w: 14 };
+  const colCaixa = { x: 86, w: 18 };
+  const colFunrural = { x: 104, w: 18 };
+  const colPreco = { x: 122, w: 18 };
+  const colTotalVenda = { x: 140, w: 18 };
+  const colTotalLiq = { x: 158, w: 22 };
   const cx = (col) => margin + col.x;
   const altLinhaTabela = 6;
+  const formatQtdePdf = (v) =>
+    Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const desenharCabecalhoTabela = () => {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(6.8);
     doc.setTextColor(...COR_RODAPE);
     doc.text("Data", cx(colData), y);
     doc.text("Cliente", cx(colCliente), y);
     doc.text("Produto", cx(colProduto), y);
-    doc.text("Vlr. Unit.", cx(colVlrUnit) + colVlrUnit.w, y, { align: "right" });
-    doc.text("Emb.", cx(colEmb) + colEmb.w, y, { align: "right" });
-    doc.text("Total", cx(colTotal) + colTotal.w, y, { align: "right" });
+    doc.text("Qtde.", cx(colQtde) + colQtde.w, y, { align: "right" });
+    doc.text("Vlr. Caixa", cx(colCaixa) + colCaixa.w, y, { align: "right" });
+    doc.text("Funrural", cx(colFunrural) + colFunrural.w, y, { align: "right" });
+    doc.text("Preço Venda", cx(colPreco) + colPreco.w, y, { align: "right" });
+    doc.text("Total Venda", cx(colTotalVenda) + colTotalVenda.w, y, { align: "right" });
+    doc.text("Total Líquida", cx(colTotalLiq) + colTotalLiq.w, y, { align: "right" });
     y += 2;
     tracejada(y);
     y += 4;
@@ -362,18 +389,22 @@ async function gerarReciboMeeiroPdf(dados) {
       doc.rect(margin, y - 4, contentW, altLinhaTabela, "F");
     }
     const embalagem = Number(r["Valor Caixa"]) || 0;
+    const funrural = meeiroFunruralLinha(r);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setTextColor(...COR_TEXTO);
     doc.text(formatExcelDate(r["Data"]), cx(colData), y);
     doc.text(truncarTextoPdf(doc, r["Cliente"] || "—", colCliente.w - 2), cx(colCliente), y);
     doc.text(truncarTextoPdf(doc, r["Descricao"] || "—", colProduto.w - 2), cx(colProduto), y);
-    doc.text(formatMoeda(meeiroValorUnitVenda(r)), cx(colVlrUnit) + colVlrUnit.w, y, { align: "right" });
-    doc.setTextColor(...COR_DOURADO);
-    doc.text(embalagem > 0 ? formatMoeda(embalagem) : "—", cx(colEmb) + colEmb.w, y, { align: "right" });
-    doc.setFont("helvetica", "bold");
+    doc.text(formatQtdePdf(r["Qtde."]), cx(colQtde) + colQtde.w, y, { align: "right" });
+    doc.text(formatMoeda(embalagem), cx(colCaixa) + colCaixa.w, y, { align: "right" });
+    doc.setTextColor(...(funrural > 0 ? COR_VERMELHO : COR_MUTED));
+    doc.text(formatMoeda(funrural), cx(colFunrural) + colFunrural.w, y, { align: "right" });
     doc.setTextColor(...COR_TEXTO);
-    doc.text(formatMoeda(meeiroTotalLiquidoLinha(r)), cx(colTotal) + colTotal.w, y, { align: "right" });
+    doc.text(formatMoeda(meeiroValorUnitVenda(r)), cx(colPreco) + colPreco.w, y, { align: "right" });
+    doc.text(formatMoeda(Number(r["Total Venda"]) || 0), cx(colTotalVenda) + colTotalVenda.w, y, { align: "right" });
+    doc.setFont("helvetica", "bold");
+    doc.text(formatMoeda(meeiroTotalComFunrural(r)), cx(colTotalLiq) + colTotalLiq.w, y, { align: "right" });
     y += altLinhaTabela;
     tracejada(y - 2);
   });
@@ -398,7 +429,6 @@ async function gerarReciboMeeiroPdf(dados) {
   };
 
   linhaResumo("Total de vendas (bruto)", formatMoeda(dados.totalBruto));
-  linhaResumo("FUNRURAL", `− ${formatMoeda(dados.funrural)}`, COR_VERMELHO);
   tracejada(y - 3);
   y += 3;
 
