@@ -14,6 +14,22 @@
 const MEEIRO_FUNRURAL_PERCENTUAL = 0.0165; // 1,65%
 const MEEIRO_CLIENTE_FUNRURAL = "PETERFRUT";
 
+// Nem toda venda tem "Valor Unit. Venda" preenchido — lançamentos antigos
+// vindos da própria planilha (antes do App Campo existir) só têm o "Total
+// Venda" já calculado. Nesses casos, reconstrói o unitário dividindo pela
+// quantidade, só pra exibição (nunca é gravado de volta).
+function meeiroValorUnitVenda(r) {
+  const v = Number(r["Valor Unit. Venda"]);
+  if (v > 0) return v;
+  const qtde = Number(r["Qtde."]) || 0;
+  return qtde > 0 ? (Number(r["Total Venda"]) || 0) / qtde : 0;
+}
+
+function meeiroTotalLiquidoLinha(r) {
+  const vl = r["Venda Liquida"];
+  return vl !== undefined && vl !== null && vl !== "" ? Number(vl) || 0 : Number(r["Total Venda"]) || 0;
+}
+
 const ScreenMeeiro = {
   percentual: 50,
 
@@ -80,22 +96,6 @@ const ScreenMeeiro = {
       return;
     }
 
-    // Nem toda venda tem "Valor Unit. Venda" preenchido — lançamentos antigos
-    // vindos da própria planilha (antes do App Campo existir) só têm o "Total
-    // Venda" já calculado. Nesses casos, reconstrói o unitário dividindo pela
-    // quantidade, só pra exibição no demonstrativo (nunca é gravado de volta).
-    const valorUnitVenda = (r) => {
-      const v = Number(r["Valor Unit. Venda"]);
-      if (v > 0) return v;
-      const qtde = Number(r["Qtde."]) || 0;
-      return qtde > 0 ? (Number(r["Total Venda"]) || 0) / qtde : 0;
-    };
-
-    const totalLiquidoLinha = (r) => {
-      const vl = r["Venda Liquida"];
-      return vl !== undefined && vl !== null && vl !== "" ? Number(vl) || 0 : Number(r["Total Venda"]) || 0;
-    };
-
     const vendasFiltradas = () => {
       if (!meeiroCod) return [];
       const inicioSerial = dataInicialEl.value ? toExcelSerial(dataInicialEl.value) : null;
@@ -113,7 +113,7 @@ const ScreenMeeiro = {
 
     const calcularTotais = (vendas) => {
       const totalBruto = vendas.reduce((s, r) => s + (Number(r["Total Venda"]) || 0), 0);
-      const totalLiquidoBruto = vendas.reduce((s, r) => s + totalLiquidoLinha(r), 0);
+      const totalLiquidoBruto = vendas.reduce((s, r) => s + meeiroTotalLiquidoLinha(r), 0);
       const baseFunrural = vendas
         .filter((r) => String(r["Cliente"] || "").trim().toUpperCase() === MEEIRO_CLIENTE_FUNRURAL)
         .reduce((s, r) => s + (Number(r["Total Venda"]) || 0), 0);
@@ -160,6 +160,7 @@ const ScreenMeeiro = {
             dataFinal: dataFinalEl.value,
             percentual: this.percentual,
             qtdeVendas: vendas.length,
+            vendas,
             ...t,
           });
         } catch (e) {
@@ -177,8 +178,8 @@ const ScreenMeeiro = {
       return `
         <div class="card meeiro-linha">
           <div class="meeiro-linha-topo"><span>${formatExcelDate(r["Data"])}</span><span>${escapeHtml(r["Cliente"] || "—")}</span></div>
-          <div class="drow"><span>${escapeHtml(r["Descricao"] || "—")}</span><span>${formatMoeda(totalLiquidoLinha(r))}</span></div>
-          <div class="meeiro-linha-sub">Qtde. ${formatNumero(r["Qtde."])} · Vlr. Unit. ${formatMoeda(valorUnitVenda(r))}${
+          <div class="drow"><span>${escapeHtml(r["Descricao"] || "—")}</span><span>${formatMoeda(meeiroTotalLiquidoLinha(r))}</span></div>
+          <div class="meeiro-linha-sub">Qtde. ${formatNumero(r["Qtde."])} · Vlr. Unit. ${formatMoeda(meeiroValorUnitVenda(r))}${
         embalagem > 0 ? ` · Embalagem ${formatMoeda(embalagem)}/un.` : ""
       }</div>
         </div>`;
@@ -223,28 +224,36 @@ function formatDataISOparaBR(iso) {
   return `${d}/${m}/${y}`;
 }
 
-// Gera o recibo de pagamento ao meeiro como imagem (PNG), num layout de
-// recibo formal: cabeçalho, identificação do meeiro/período, composição do
-// valor (bruto → FUNRURAL → líquido → percentual → valor a pagar em
-// destaque), o texto de referência do pagamento e linhas de assinatura.
+// Gera o recibo de pagamento ao meeiro como imagem (PNG): cabeçalho, meeiro +
+// período, o extrato analítico das vendas em TABELA (uma linha por venda, pra
+// dar pra conferir cada lançamento), a apuração (bruto → FUNRURAL → líquido →
+// percentual → valor a pagar em destaque), o texto de referência do
+// pagamento e uma única linha de assinatura — a do meeiro selecionado (o
+// recibo é dele assinar; não há segunda via da Peterfrut aqui).
 async function gerarReciboMeeiroPng(dados) {
   const fonte = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
   const escala = 2;
-  const largura = 420;
+  const largura = 520;
   const padding = 24;
   const contentW = largura - padding * 2;
   const raio = 22;
-  const altHeader = 96;
+  const altHeader = 62;
+
+  const vendas = dados.vendas || [];
+
+  // Colunas da tabela do extrato (larguras fixas, produto ocupa o resto).
+  const colData = { x: 0, w: 46 };
+  const colCliente = { x: 46, w: 80 };
+  const colVlrUnit = { x: 348, w: 62 };
+  const colEmb = { x: 410, w: 0 }; // calculado abaixo (fica entre Vlr.Unit e Total)
+  colEmb.w = 62;
+  const colTotal = { x: 472, w: 0 };
+  colTotal.x = colVlrUnit.x + colVlrUnit.w + colEmb.w;
+  colTotal.w = contentW - colTotal.x;
+  const colProduto = { x: colCliente.x + colCliente.w, w: colVlrUnit.x - (colCliente.x + colCliente.w) - 10 };
 
   const medCtx = document.createElement("canvas").getContext("2d");
   const periodoTexto = `${formatDataISOparaBR(dados.dataInicial)} a ${formatDataISOparaBR(dados.dataFinal)}`;
-
-  medCtx.font = `13px ${fonte}`;
-  const funruralLabel = quebrarTextoCanvas(medCtx, "FUNRURAL (1,65% s/ vendas Peterfrut)", contentW * 0.56, 2);
-  const linhasCorpo = [
-    { label: ["Total de vendas (bruto)"], valor: formatMoeda(dados.totalBruto) },
-    { label: funruralLabel, valor: `− ${formatMoeda(dados.funrural)}`, cor: "#B3261E" },
-  ];
 
   medCtx.font = `italic 12px ${fonte}`;
   const declaracao = quebrarTextoCanvas(
@@ -254,31 +263,34 @@ async function gerarReciboMeeiroPng(dados) {
     6
   );
 
-  const altLinha = (l) => 20 + l.label.length * 17;
-  const altBlocoTopo = 30 + 30;
-  const altLinhasBrutoFunrural = linhasCorpo.reduce((s, l) => s + altLinha(l), 0);
-  const altDashed = 18;
-  const altTotalLiquido = 32;
-  const altPercentual = 30;
+  const altBlocoTopo = 30 + 24 + 22; // nome do meeiro + período + "Extrato das vendas"
+  const altTabelaHeader = 22;
+  const altLinhaTabela = 25;
+  const altTabela = altTabelaHeader + vendas.length * altLinhaTabela + 14;
+  const altApuracaoHead = 22;
+  const altLinhaResumo = 26;
+  const altDashed = 16;
   const altDestaque = 78;
   const altDeclaracao = declaracao.length * 16 + 20;
   const altVendasInfo = 26;
-  const altAssinaturas = 76;
+  const altAssinatura = 60;
 
   const altura =
     altHeader +
     padding +
     altBlocoTopo +
-    altLinhasBrutoFunrural +
+    altTabela +
+    12 +
+    altApuracaoHead +
+    altLinhaResumo * 3 + // bruto / funrural / percentual
     altDashed +
-    altTotalLiquido +
-    altPercentual +
+    28 + // total líquido
     altDashed +
     altDestaque +
     16 +
     altDeclaracao +
     altVendasInfo +
-    altAssinaturas +
+    altAssinatura +
     padding;
 
   const canvas = document.createElement("canvas");
@@ -314,18 +326,15 @@ async function gerarReciboMeeiroPng(dados) {
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(0, 0, largura, altura);
 
-  // Cabeçalho.
+  // Cabeçalho — só o título, sem subtítulo.
   ctx.fillStyle = "#1F3D2B";
   ctx.fillRect(0, 0, largura, altHeader);
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = `26px ${fonte}`;
+  ctx.font = `24px ${fonte}`;
   ctx.textAlign = "left";
-  ctx.fillText("🧾", padding, 38);
+  ctx.fillText("🧾", padding, altHeader / 2);
   ctx.font = `600 19px ${fonte}`;
-  ctx.fillText("Recibo de Pagamento", padding + 34, 38);
-  ctx.font = `13px ${fonte}`;
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
-  ctx.fillText("Peterfrut · Parceria agrícola", padding, 68);
+  ctx.fillText("Recibo de Pagamento", padding + 32, altHeader / 2);
 
   let y = altHeader + padding;
 
@@ -338,44 +347,90 @@ async function gerarReciboMeeiroPng(dados) {
   ctx.font = `13px ${fonte}`;
   ctx.fillStyle = "#6B6B65";
   ctx.fillText(`Período: ${periodoTexto}`, padding, y);
-  y += 30;
+  y += 24;
 
-  // Bruto / FUNRURAL.
-  linhasCorpo.forEach((l) => {
-    const h = altLinha(l);
-    ctx.font = `13px ${fonte}`;
-    ctx.fillStyle = l.cor || "#3A3A34";
+  // --- Extrato das vendas, em tabela -----------------------------------
+  ctx.font = `600 10.5px ${fonte}`;
+  ctx.fillStyle = "#6B6B65";
+  ctx.fillText(`EXTRATO DAS VENDAS · ${vendas.length} LANÇAMENTO${vendas.length === 1 ? "" : "S"}`, padding, y + 8);
+  y += 22;
+
+  const colX = (col) => padding + col.x;
+  const truncar = (texto, larguraMax) => truncarTextoCanvas(medCtx, texto, larguraMax);
+
+  // Cabeçalho da tabela.
+  ctx.font = `600 10px ${fonte}`;
+  ctx.fillStyle = "#8A887F";
+  ctx.textAlign = "left";
+  ctx.fillText("Data", colX(colData), y + altTabelaHeader / 2);
+  ctx.fillText("Cliente", colX(colCliente), y + altTabelaHeader / 2);
+  ctx.fillText("Produto", colX(colProduto), y + altTabelaHeader / 2);
+  ctx.textAlign = "right";
+  ctx.fillText("Vlr. Unit.", colX(colVlrUnit) + colVlrUnit.w, y + altTabelaHeader / 2);
+  ctx.fillText("Emb.", colX(colEmb) + colEmb.w, y + altTabelaHeader / 2);
+  ctx.fillText("Total", colX(colTotal) + colTotal.w, y + altTabelaHeader / 2);
+  y += altTabelaHeader;
+  tracejada(y);
+
+  // Linhas — uma por venda, zebra pra facilitar a leitura de tabelas longas.
+  vendas.forEach((r, idx) => {
+    const h = altLinhaTabela;
+    if (idx % 2 === 1) {
+      ctx.fillStyle = "#FAF9F6";
+      ctx.fillRect(padding - 4, y, contentW + 8, h);
+    }
+    const embalagem = Number(r["Valor Caixa"]) || 0;
+    ctx.font = `11px ${fonte}`;
+    ctx.fillStyle = "#3A3A34";
     ctx.textAlign = "left";
-    const yLabel = y + h / 2 - ((l.label.length - 1) * 17) / 2;
-    l.label.forEach((linha, i) => ctx.fillText(linha, padding, yLabel + i * 17));
+    ctx.fillText(formatExcelDate(r["Data"]), colX(colData), y + h / 2);
+    ctx.fillText(truncar(String(r["Cliente"] || "—"), colCliente.w - 6), colX(colCliente), y + h / 2);
+    ctx.fillText(truncar(String(r["Descricao"] || "—"), colProduto.w - 6), colX(colProduto), y + h / 2);
+    ctx.textAlign = "right";
+    ctx.fillText(formatMoeda(meeiroValorUnitVenda(r)), colX(colVlrUnit) + colVlrUnit.w, y + h / 2);
+    ctx.fillStyle = "#B5792E";
+    ctx.fillText(embalagem > 0 ? formatMoeda(embalagem) : "—", colX(colEmb) + colEmb.w, y + h / 2);
+    ctx.font = `600 11.5px ${fonte}`;
+    ctx.fillStyle = "#1A1A1A";
+    ctx.fillText(formatMoeda(meeiroTotalLiquidoLinha(r)), colX(colTotal) + colTotal.w, y + h / 2);
+    y += h;
+    tracejada(y);
+  });
+  y += 12;
+
+  // --- Apuração ----------------------------------------------------------
+  ctx.font = `600 10.5px ${fonte}`;
+  ctx.fillStyle = "#6B6B65";
+  ctx.textAlign = "left";
+  ctx.fillText("APURAÇÃO", padding, y + 8);
+  y += altApuracaoHead;
+
+  const linhaResumo = (label, valor, opts = {}) => {
+    ctx.font = `${opts.negrito ? "600 " : ""}13px ${fonte}`;
+    ctx.fillStyle = opts.cor || "#3A3A34";
+    ctx.textAlign = "left";
+    ctx.fillText(label, padding, y + altLinhaResumo / 2);
     ctx.font = `600 14px ${fonte}`;
     ctx.textAlign = "right";
-    ctx.fillText(l.valor, largura - padding, y + h / 2);
-    y += h;
-  });
+    ctx.fillText(valor, largura - padding, y + altLinhaResumo / 2);
+    y += altLinhaResumo;
+  };
 
-  tracejada(y + 8);
+  linhaResumo("Total de vendas (bruto)", formatMoeda(dados.totalBruto));
+  linhaResumo("FUNRURAL", `− ${formatMoeda(dados.funrural)}`, { cor: "#B3261E" });
+
+  tracejada(y + 6);
   y += altDashed;
 
-  // Total líquido.
   ctx.font = `600 15px ${fonte}`;
   ctx.fillStyle = "#1A1A1A";
   ctx.textAlign = "left";
-  ctx.fillText("Total Líquido", padding, y + altTotalLiquido / 2);
+  ctx.fillText("Total Líquido", padding, y + 12);
   ctx.textAlign = "right";
-  ctx.fillText(formatMoeda(dados.totalLiquidoFinal), largura - padding, y + altTotalLiquido / 2);
-  y += altTotalLiquido;
+  ctx.fillText(formatMoeda(dados.totalLiquidoFinal), largura - padding, y + 12);
+  y += 28;
 
-  // Percentual do meeiro.
-  ctx.font = `13px ${fonte}`;
-  ctx.fillStyle = "#6B6B65";
-  ctx.textAlign = "left";
-  ctx.fillText("Percentual do meeiro", padding, y + altPercentual / 2);
-  ctx.font = `600 13px ${fonte}`;
-  ctx.fillStyle = "#3A3A34";
-  ctx.textAlign = "right";
-  ctx.fillText(`${dados.percentual}%`, largura - padding, y + altPercentual / 2);
-  y += altPercentual;
+  linhaResumo("Percentual do meeiro", `${dados.percentual}%`);
 
   tracejada(y + 6);
   y += altDashed;
@@ -412,21 +467,21 @@ async function gerarReciboMeeiroPng(dados) {
   );
   y += altVendasInfo;
 
-  // Linhas de assinatura (Meeiro / Peterfrut).
-  const largLinha = (contentW - 20) / 2;
+  // Uma única linha de assinatura — a do meeiro (não há segunda via aqui).
+  const largAssinatura = Math.min(260, contentW);
   ctx.strokeStyle = "#C9C7BC";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(padding, y + 30);
-  ctx.lineTo(padding + largLinha, y + 30);
-  ctx.moveTo(padding + largLinha + 20, y + 30);
-  ctx.lineTo(padding + largLinha + 20 + largLinha, y + 30);
+  ctx.moveTo(padding, y + 26);
+  ctx.lineTo(padding + largAssinatura, y + 26);
   ctx.stroke();
-  ctx.font = `11px ${fonte}`;
+  ctx.font = `600 11.5px ${fonte}`;
+  ctx.fillStyle = "#1A1A1A";
+  ctx.textAlign = "left";
+  ctx.fillText(dados.meeiroNome, padding, y + 42);
+  ctx.font = `10px ${fonte}`;
   ctx.fillStyle = "#8A887F";
-  ctx.textAlign = "center";
-  ctx.fillText("Meeiro", padding + largLinha / 2, y + 46);
-  ctx.fillText("Peterfrut", padding + largLinha + 20 + largLinha / 2, y + 46);
+  ctx.fillText("Assinatura do meeiro", padding, y + 56);
 
   ctx.restore();
 
