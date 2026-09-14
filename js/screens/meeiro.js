@@ -1,6 +1,10 @@
 // ============================================================================
 // MEEIRO — apuração do valor a pagar ao meeiro sobre as vendas do período, e
-// geração de um recibo (imagem) pronto pra enviar por WhatsApp.
+// geração de um recibo (PDF) pronto pra enviar por WhatsApp. A tela já
+// pré-visualiza o recibo completo (o PDF de verdade, num <iframe>) assim que
+// meeiro/período/percentual são escolhidos, em vez de mostrar uma lista à
+// parte das vendas — assim a pessoa confere exatamente o que vai ser
+// enviado antes de tocar em "Gerar recibo e enviar".
 //
 // Fonte dos dados: aba "Registro de Inventario" (Tabela2), só as linhas de
 // Venda (Tipo Movimentação = "V") do meeiro escolhido. O FUNRURAL (1,65%)
@@ -79,18 +83,29 @@ const ScreenMeeiro = {
 
       <div id="meeiro-resumo"></div>
 
-      <div class="sechead">Demonstrativo de vendas</div>
-      <div id="meeiro-lista"><div class="empty-state">Selecione o meeiro pra ver as vendas.</div></div>
+      <div class="sechead">Recibo (pré-visualização)</div>
+      <div id="meeiro-recibo-preview"><div class="empty-state">Selecione o meeiro pra ver o recibo.</div></div>
     `;
 
     const resumoEl = container.querySelector("#meeiro-resumo");
-    const listaEl = container.querySelector("#meeiro-lista");
+    const previewEl = container.querySelector("#meeiro-recibo-preview");
     const dataInicialEl = container.querySelector("#meeiro-data-inicial");
     const dataFinalEl = container.querySelector("#meeiro-data-final");
     const toggleEl = container.querySelector("#meeiro-percentual-toggle");
 
     let meeiroCod = null;
     let todasVendas = [];
+
+    // Blob do PDF já gerado pra pré-visualização atual — reaproveitado pelo
+    // botão "Gerar recibo e enviar" (evita gerar o PDF duas vezes) e revogado
+    // (URL.revokeObjectURL) sempre que uma nova pré-visualização é montada,
+    // pra não acumular URLs de blob na memória enquanto a pessoa troca
+    // filtros. reciboRequestId descarta resultados de gerações antigas que
+    // terminam depois de uma mais nova ter começado (troca rápida de filtro).
+    let reciboBlobUrl = null;
+    let reciboBlobAtual = null;
+    let reciboDadosAtuais = null;
+    let reciboRequestId = 0;
 
     const meeiroOpcoes = lookups.meeiros.map((m) => ({ value: m.__cod, label: m["Meeiro"] }));
     criarComboBusca(container.querySelector("#meeiro-combo"), meeiroOpcoes, {
@@ -138,7 +153,7 @@ const ScreenMeeiro = {
       return { totalBruto, funrural, totalLiquidoFinal, valorMeeiro };
     };
 
-    const renderResumo = (vendas) => {
+    const renderResumo = (vendas, dadosRecibo) => {
       if (!meeiroCod) {
         resumoEl.innerHTML = "";
         return;
@@ -166,16 +181,16 @@ const ScreenMeeiro = {
         btnRecibo.disabled = true;
         btnRecibo.textContent = "Gerando...";
         try {
-          const meeiro = lookups.meeiros.find((m) => String(m.__cod) === String(meeiroCod));
-          await enviarReciboMeeiro({
-            meeiroNome: meeiro ? meeiro["Meeiro"] : "—",
-            dataInicial: dataInicialEl.value,
-            dataFinal: dataFinalEl.value,
-            percentual: this.percentual,
-            qtdeVendas: vendas.length,
-            vendas,
-            ...t,
-          });
+          // A pré-visualização (renderRecibo) já gera esse PDF em segundo
+          // plano assim que os filtros mudam — se ele já terminou e os dados
+          // não mudaram desde então, reaproveita o mesmo blob em vez de
+          // gerar tudo de novo.
+          if (reciboBlobAtual && reciboDadosAtuais === dadosRecibo) {
+            const nomeArquivo = `recibo-${dadosRecibo.meeiroNome}-${dadosRecibo.dataFinal}`.replace(/[^\w-]+/g, "_") + ".pdf";
+            await compartilharArquivo(reciboBlobAtual, nomeArquivo, "application/pdf", "PDF");
+          } else {
+            await enviarReciboMeeiro(dadosRecibo);
+          }
         } catch (e) {
           console.error("Falha ao gerar recibo:", e);
           showToast("Não foi possível gerar o recibo.");
@@ -186,35 +201,62 @@ const ScreenMeeiro = {
       });
     };
 
-    const linhaHtml = (r) => {
-      const embalagem = Number(r["Valor Caixa"]) || 0;
-      const funrural = meeiroFunruralLinha(r);
-      return `
-        <div class="card meeiro-linha">
-          <div class="meeiro-linha-topo"><span>${formatExcelDate(r["Data"])}</span><span>${escapeHtml(r["Cliente"] || "—")}</span></div>
-          <div class="drow"><span>${escapeHtml(r["Descricao"] || "—")}</span><span>${formatMoeda(meeiroTotalComFunrural(r))}</span></div>
-          <div class="meeiro-linha-sub">Qtde. ${formatNumero(r["Qtde."])} · Vlr. Unit. ${formatMoeda(meeiroValorUnitVenda(r))}${
-        embalagem > 0 ? ` · Embalagem ${formatMoeda(embalagem)}/un.` : ""
-      }${funrural > 0 ? ` · Funrural ${formatMoeda(funrural)}` : ""}</div>
-        </div>`;
-    };
-
-    const renderLista = (vendas) => {
+    // Gera o PDF do recibo em segundo plano e mostra ele direto na tela (em
+    // vez da antiga lista de vendas em cards) — assim a pessoa já confere o
+    // recibo completo, exatamente como ele vai ser enviado, antes de tocar
+    // em "Gerar recibo e enviar". reciboRequestId evita que uma geração
+    // antiga (de um filtro já trocado) sobrescreva a pré-visualização atual
+    // caso ela termine depois de uma mais nova.
+    const renderRecibo = async (vendas, dadosRecibo) => {
       if (!meeiroCod) {
-        listaEl.innerHTML = `<div class="empty-state">Selecione o meeiro pra ver as vendas.</div>`;
+        previewEl.innerHTML = `<div class="empty-state">Selecione o meeiro pra ver o recibo.</div>`;
         return;
       }
       if (vendas.length === 0) {
-        listaEl.innerHTML = `<div class="empty-state">Nenhuma venda nesse período.</div>`;
+        previewEl.innerHTML = `<div class="empty-state">Nenhuma venda nesse período.</div>`;
         return;
       }
-      listaEl.innerHTML = vendas.map(linhaHtml).join("");
+      const meuRequestId = ++reciboRequestId;
+      previewEl.innerHTML = `<div class="empty-state">Gerando pré-visualização do recibo...</div>`;
+      try {
+        const blob = await gerarReciboMeeiroPdf(dadosRecibo);
+        if (meuRequestId !== reciboRequestId) return; // um filtro mais novo já foi selecionado enquanto isso gerava
+
+        if (reciboBlobUrl) URL.revokeObjectURL(reciboBlobUrl);
+        reciboBlobUrl = URL.createObjectURL(blob);
+        reciboBlobAtual = blob;
+        reciboDadosAtuais = dadosRecibo;
+
+        previewEl.innerHTML = `
+          <div class="meeiro-recibo-preview">
+            <iframe class="meeiro-recibo-iframe" src="${reciboBlobUrl}" title="Pré-visualização do recibo"></iframe>
+            <a class="meeiro-recibo-abrir" href="${reciboBlobUrl}" target="_blank" rel="noopener">Abrir recibo em nova aba ↗</a>
+          </div>
+        `;
+      } catch (e) {
+        if (meuRequestId !== reciboRequestId) return;
+        console.error("Falha ao gerar pré-visualização do recibo:", e);
+        previewEl.innerHTML = `<div class="empty-state">Não foi possível gerar a pré-visualização (${escapeHtml(
+          String(e.message || e)
+        )}).</div>`;
+      }
     };
 
     const renderTudo = () => {
       const vendas = vendasFiltradas();
-      renderResumo(vendas);
-      renderLista(vendas);
+      const t = calcularTotais(vendas);
+      const meeiro = lookups.meeiros.find((m) => String(m.__cod) === String(meeiroCod));
+      const dadosRecibo = {
+        meeiroNome: meeiro ? meeiro["Meeiro"] : "—",
+        dataInicial: dataInicialEl.value,
+        dataFinal: dataFinalEl.value,
+        percentual: this.percentual,
+        qtdeVendas: vendas.length,
+        vendas,
+        ...t,
+      };
+      renderResumo(vendas, dadosRecibo);
+      renderRecibo(vendas, dadosRecibo);
     };
 
     toggleEl.querySelectorAll(".chip").forEach((chip) => {
