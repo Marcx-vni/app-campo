@@ -10,6 +10,7 @@ const routes = {
   apontamento: (el) => ScreenApontamentoLivre.render(el),
   estoque: (el) => ScreenEstoque.render(el),
   financeiro: (el) => ScreenFinanceiro.render(el),
+  meeiro: (el) => ScreenMeeiro.render(el),
   fila: (el) => ScreenFila.render(el),
 };
 
