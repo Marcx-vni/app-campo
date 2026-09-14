@@ -224,277 +224,260 @@ function formatDataISOparaBR(iso) {
   return `${d}/${m}/${y}`;
 }
 
-// Gera o recibo de pagamento ao meeiro como imagem (PNG): cabeçalho, meeiro +
-// período, o extrato analítico das vendas em TABELA (uma linha por venda, pra
-// dar pra conferir cada lançamento), a apuração (bruto → FUNRURAL → líquido →
+// Gera o recibo de pagamento ao meeiro em PDF (A4) — cabeçalho, meeiro +
+// período, o extrato analítico das vendas em TABELA (uma linha por venda,
+// pra dar pra conferir cada lançamento — pagina automaticamente se não
+// couber numa folha só), a apuração (bruto → FUNRURAL → líquido →
 // percentual → valor a pagar em destaque), o texto de referência do
 // pagamento e uma única linha de assinatura — a do meeiro selecionado (o
 // recibo é dele assinar; não há segunda via da Peterfrut aqui).
-async function gerarReciboMeeiroPng(dados) {
-  const fonte = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
-  const escala = 2;
-  const largura = 520;
-  const padding = 24;
-  const contentW = largura - padding * 2;
-  const raio = 22;
-  const altHeader = 62;
+//
+// Usa jsPDF (CDN, carregado em index.html) — igual ao Chart.js do
+// Financeiro, só funciona com a página já carregada com internet ao menos
+// uma vez; se a biblioteca não tiver carregado (ex.: script bloqueado),
+// avisa em vez de travar.
+function truncarTextoPdf(doc, texto, larguraMaxMM) {
+  const t = String(texto ?? "");
+  if (doc.getTextWidth(t) <= larguraMaxMM) return t;
+  let cortado = t;
+  while (cortado.length > 1 && doc.getTextWidth(cortado + "…") > larguraMaxMM) {
+    cortado = cortado.slice(0, -1);
+  }
+  return cortado + "…";
+}
+
+async function gerarReciboMeeiroPdf(dados) {
+  if (typeof window.jspdf === "undefined" || !window.jspdf.jsPDF) {
+    throw new Error("Biblioteca de PDF não carregou (sem internet na primeira vez que o app abriu?).");
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
 
   const vendas = dados.vendas || [];
+  const margin = 15;
+  const pageW = 210;
+  const contentW = pageW - margin * 2; // 180mm
+  const bottomLimit = 282; // deixa ~15mm de margem inferior na folha A4 (297mm)
 
-  // Colunas da tabela do extrato (larguras fixas, produto ocupa o resto).
-  const colData = { x: 0, w: 46 };
-  const colCliente = { x: 46, w: 80 };
-  const colVlrUnit = { x: 348, w: 62 };
-  const colEmb = { x: 410, w: 0 }; // calculado abaixo (fica entre Vlr.Unit e Total)
-  colEmb.w = 62;
-  const colTotal = { x: 472, w: 0 };
-  colTotal.x = colVlrUnit.x + colVlrUnit.w + colEmb.w;
-  colTotal.w = contentW - colTotal.x;
-  const colProduto = { x: colCliente.x + colCliente.w, w: colVlrUnit.x - (colCliente.x + colCliente.w) - 10 };
+  // Cores (mesma paleta do app, em RGB).
+  const COR_VERDE = [31, 61, 43];
+  const COR_TEXTO = [26, 26, 26];
+  const COR_MUTED = [107, 107, 101];
+  const COR_RODAPE = [138, 136, 127];
+  const COR_BORDA = [222, 220, 210];
+  const COR_ZEBRA = [250, 249, 246];
+  const COR_VERMELHO = [179, 38, 30];
+  const COR_DOURADO = [181, 121, 46];
 
-  const medCtx = document.createElement("canvas").getContext("2d");
   const periodoTexto = `${formatDataISOparaBR(dados.dataInicial)} a ${formatDataISOparaBR(dados.dataFinal)}`;
 
-  medCtx.font = `italic 12px ${fonte}`;
-  const declaracao = quebrarTextoCanvas(
-    medCtx,
-    "Referente ao pagamento pela venda de produtos hortifrutigranjeiros pelo(a) meeiro(a) acima, conforme contrato de parceria agrícola (meação), no período indicado.",
-    contentW,
-    6
-  );
+  let y = margin;
+  let pagina = 1;
 
-  const altBlocoTopo = 30 + 24 + 22; // nome do meeiro + período + "Extrato das vendas"
-  const altTabelaHeader = 22;
-  const altLinhaTabela = 25;
-  const altTabela = altTabelaHeader + vendas.length * altLinhaTabela + 14;
-  const altApuracaoHead = 22;
-  const altLinhaResumo = 26;
-  const altDashed = 16;
-  const altDestaque = 78;
-  const altDeclaracao = declaracao.length * 16 + 20;
-  const altVendasInfo = 26;
-  const altAssinatura = 60;
-
-  const altura =
-    altHeader +
-    padding +
-    altBlocoTopo +
-    altTabela +
-    12 +
-    altApuracaoHead +
-    altLinhaResumo * 3 + // bruto / funrural / percentual
-    altDashed +
-    28 + // total líquido
-    altDashed +
-    altDestaque +
-    16 +
-    altDeclaracao +
-    altVendasInfo +
-    altAssinatura +
-    padding;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(largura * escala);
-  canvas.height = Math.ceil(altura * escala);
-  const ctx = canvas.getContext("2d");
-  ctx.scale(escala, escala);
-  ctx.textBaseline = "middle";
-
-  const retanguloArredondado = (x, y, w, h, r) => {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+  const novaPagina = () => {
+    doc.addPage();
+    pagina += 1;
+    y = margin;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...COR_RODAPE);
+    doc.text(`Recibo de Pagamento — continuação (pág. ${pagina})`, margin, y);
+    y += 8;
+  };
+  const garantirEspaco = (alturaNecessaria) => {
+    if (y + alturaNecessaria > bottomLimit) novaPagina();
   };
   const tracejada = (yy) => {
-    ctx.save();
-    ctx.strokeStyle = "#DEDCD2";
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(padding, yy);
-    ctx.lineTo(largura - padding, yy);
-    ctx.stroke();
-    ctx.restore();
+    doc.setDrawColor(...COR_BORDA);
+    doc.setLineDashPattern([0.8, 0.8], 0);
+    doc.line(margin, yy, margin + contentW, yy);
+    doc.setLineDashPattern([], 0);
   };
 
-  ctx.save();
-  retanguloArredondado(0, 0, largura, altura, raio);
-  ctx.clip();
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(0, 0, largura, altura);
-
-  // Cabeçalho — só o título, sem subtítulo.
-  ctx.fillStyle = "#1F3D2B";
-  ctx.fillRect(0, 0, largura, altHeader);
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = `24px ${fonte}`;
-  ctx.textAlign = "left";
-  ctx.fillText("🧾", padding, altHeader / 2);
-  ctx.font = `600 19px ${fonte}`;
-  ctx.fillText("Recibo de Pagamento", padding + 32, altHeader / 2);
-
-  let y = altHeader + padding;
+  // --- Cabeçalho (só na 1ª página) ---------------------------------------
+  doc.setFillColor(...COR_VERDE);
+  doc.rect(0, 0, pageW, 20, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Recibo de Pagamento", margin, 13);
+  y = 30;
 
   // Meeiro + período.
-  ctx.textAlign = "left";
-  ctx.font = `600 18px ${fonte}`;
-  ctx.fillStyle = "#1A1A1A";
-  ctx.fillText(dados.meeiroNome, padding, y + 10);
-  y += 30;
-  ctx.font = `13px ${fonte}`;
-  ctx.fillStyle = "#6B6B65";
-  ctx.fillText(`Período: ${periodoTexto}`, padding, y);
-  y += 24;
+  doc.setTextColor(...COR_TEXTO);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text(dados.meeiroNome || "—", margin, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...COR_MUTED);
+  doc.text(`Período: ${periodoTexto}`, margin, y);
+  y += 10;
 
-  // --- Extrato das vendas, em tabela -----------------------------------
-  ctx.font = `600 10.5px ${fonte}`;
-  ctx.fillStyle = "#6B6B65";
-  ctx.fillText(`EXTRATO DAS VENDAS · ${vendas.length} LANÇAMENTO${vendas.length === 1 ? "" : "S"}`, padding, y + 8);
-  y += 22;
+  // --- Extrato das vendas, em tabela --------------------------------------
+  const colData = { x: 0, w: 16 };
+  const colCliente = { x: 16, w: 30 };
+  const colProduto = { x: 46, w: 64 };
+  const colVlrUnit = { x: 110, w: 24 };
+  const colEmb = { x: 134, w: 20 };
+  const colTotal = { x: 154, w: 26 };
+  const cx = (col) => margin + col.x;
+  const altLinhaTabela = 6;
 
-  const colX = (col) => padding + col.x;
-  const truncar = (texto, larguraMax) => truncarTextoCanvas(medCtx, texto, larguraMax);
+  const desenharCabecalhoTabela = () => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...COR_RODAPE);
+    doc.text("Data", cx(colData), y);
+    doc.text("Cliente", cx(colCliente), y);
+    doc.text("Produto", cx(colProduto), y);
+    doc.text("Vlr. Unit.", cx(colVlrUnit) + colVlrUnit.w, y, { align: "right" });
+    doc.text("Emb.", cx(colEmb) + colEmb.w, y, { align: "right" });
+    doc.text("Total", cx(colTotal) + colTotal.w, y, { align: "right" });
+    y += 2;
+    tracejada(y);
+    y += 4;
+  };
 
-  // Cabeçalho da tabela.
-  ctx.font = `600 10px ${fonte}`;
-  ctx.fillStyle = "#8A887F";
-  ctx.textAlign = "left";
-  ctx.fillText("Data", colX(colData), y + altTabelaHeader / 2);
-  ctx.fillText("Cliente", colX(colCliente), y + altTabelaHeader / 2);
-  ctx.fillText("Produto", colX(colProduto), y + altTabelaHeader / 2);
-  ctx.textAlign = "right";
-  ctx.fillText("Vlr. Unit.", colX(colVlrUnit) + colVlrUnit.w, y + altTabelaHeader / 2);
-  ctx.fillText("Emb.", colX(colEmb) + colEmb.w, y + altTabelaHeader / 2);
-  ctx.fillText("Total", colX(colTotal) + colTotal.w, y + altTabelaHeader / 2);
-  y += altTabelaHeader;
-  tracejada(y);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...COR_MUTED);
+  doc.text(`EXTRATO DAS VENDAS · ${vendas.length} LANÇAMENTO${vendas.length === 1 ? "" : "S"}`, margin, y);
+  y += 6;
+  desenharCabecalhoTabela();
 
-  // Linhas — uma por venda, zebra pra facilitar a leitura de tabelas longas.
+  const garantirEspacoTabela = () => {
+    if (y + altLinhaTabela + 2 > bottomLimit) {
+      novaPagina();
+      desenharCabecalhoTabela();
+    }
+  };
+
   vendas.forEach((r, idx) => {
-    const h = altLinhaTabela;
+    garantirEspacoTabela();
+
     if (idx % 2 === 1) {
-      ctx.fillStyle = "#FAF9F6";
-      ctx.fillRect(padding - 4, y, contentW + 8, h);
+      doc.setFillColor(...COR_ZEBRA);
+      doc.rect(margin, y - 4, contentW, altLinhaTabela, "F");
     }
     const embalagem = Number(r["Valor Caixa"]) || 0;
-    ctx.font = `11px ${fonte}`;
-    ctx.fillStyle = "#3A3A34";
-    ctx.textAlign = "left";
-    ctx.fillText(formatExcelDate(r["Data"]), colX(colData), y + h / 2);
-    ctx.fillText(truncar(String(r["Cliente"] || "—"), colCliente.w - 6), colX(colCliente), y + h / 2);
-    ctx.fillText(truncar(String(r["Descricao"] || "—"), colProduto.w - 6), colX(colProduto), y + h / 2);
-    ctx.textAlign = "right";
-    ctx.fillText(formatMoeda(meeiroValorUnitVenda(r)), colX(colVlrUnit) + colVlrUnit.w, y + h / 2);
-    ctx.fillStyle = "#B5792E";
-    ctx.fillText(embalagem > 0 ? formatMoeda(embalagem) : "—", colX(colEmb) + colEmb.w, y + h / 2);
-    ctx.font = `600 11.5px ${fonte}`;
-    ctx.fillStyle = "#1A1A1A";
-    ctx.fillText(formatMoeda(meeiroTotalLiquidoLinha(r)), colX(colTotal) + colTotal.w, y + h / 2);
-    y += h;
-    tracejada(y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...COR_TEXTO);
+    doc.text(formatExcelDate(r["Data"]), cx(colData), y);
+    doc.text(truncarTextoPdf(doc, r["Cliente"] || "—", colCliente.w - 2), cx(colCliente), y);
+    doc.text(truncarTextoPdf(doc, r["Descricao"] || "—", colProduto.w - 2), cx(colProduto), y);
+    doc.text(formatMoeda(meeiroValorUnitVenda(r)), cx(colVlrUnit) + colVlrUnit.w, y, { align: "right" });
+    doc.setTextColor(...COR_DOURADO);
+    doc.text(embalagem > 0 ? formatMoeda(embalagem) : "—", cx(colEmb) + colEmb.w, y, { align: "right" });
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...COR_TEXTO);
+    doc.text(formatMoeda(meeiroTotalLiquidoLinha(r)), cx(colTotal) + colTotal.w, y, { align: "right" });
+    y += altLinhaTabela;
+    tracejada(y - 2);
   });
-  y += 12;
+  y += 6;
 
-  // --- Apuração ----------------------------------------------------------
-  ctx.font = `600 10.5px ${fonte}`;
-  ctx.fillStyle = "#6B6B65";
-  ctx.textAlign = "left";
-  ctx.fillText("APURAÇÃO", padding, y + 8);
-  y += altApuracaoHead;
+  // --- Apuração ------------------------------------------------------------
+  garantirEspaco(60);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...COR_MUTED);
+  doc.text("APURAÇÃO", margin, y);
+  y += 7;
 
-  const linhaResumo = (label, valor, opts = {}) => {
-    ctx.font = `${opts.negrito ? "600 " : ""}13px ${fonte}`;
-    ctx.fillStyle = opts.cor || "#3A3A34";
-    ctx.textAlign = "left";
-    ctx.fillText(label, padding, y + altLinhaResumo / 2);
-    ctx.font = `600 14px ${fonte}`;
-    ctx.textAlign = "right";
-    ctx.fillText(valor, largura - padding, y + altLinhaResumo / 2);
-    y += altLinhaResumo;
+  const linhaResumo = (label, valor, cor) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...(cor || COR_TEXTO));
+    doc.text(label, margin, y);
+    doc.setFont("helvetica", "bold");
+    doc.text(valor, margin + contentW, y, { align: "right" });
+    y += 7;
   };
 
   linhaResumo("Total de vendas (bruto)", formatMoeda(dados.totalBruto));
-  linhaResumo("FUNRURAL", `− ${formatMoeda(dados.funrural)}`, { cor: "#B3261E" });
+  linhaResumo("FUNRURAL", `− ${formatMoeda(dados.funrural)}`, COR_VERMELHO);
+  tracejada(y - 3);
+  y += 3;
 
-  tracejada(y + 6);
-  y += altDashed;
-
-  ctx.font = `600 15px ${fonte}`;
-  ctx.fillStyle = "#1A1A1A";
-  ctx.textAlign = "left";
-  ctx.fillText("Total Líquido", padding, y + 12);
-  ctx.textAlign = "right";
-  ctx.fillText(formatMoeda(dados.totalLiquidoFinal), largura - padding, y + 12);
-  y += 28;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...COR_TEXTO);
+  doc.text("Total Líquido", margin, y);
+  doc.text(formatMoeda(dados.totalLiquidoFinal), margin + contentW, y, { align: "right" });
+  y += 8;
 
   linhaResumo("Percentual do meeiro", `${dados.percentual}%`);
+  tracejada(y - 3);
+  y += 5;
 
-  tracejada(y + 6);
-  y += altDashed;
+  // --- Destaque — valor a pagar ---------------------------------------------
+  garantirEspaco(24);
+  doc.setFillColor(...COR_VERDE);
+  doc.roundedRect(margin, y, contentW, 18, 3, 3, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(230, 236, 232);
+  doc.text("VALOR A PAGAR AO MEEIRO", margin + 6, y + 7);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(255, 255, 255);
+  doc.text(formatMoeda(dados.valorMeeiro), margin + 6, y + 14.5);
+  y += 26;
 
-  // Destaque — valor a pagar.
-  ctx.fillStyle = "#1F3D2B";
-  retanguloArredondado(padding, y, contentW, altDestaque, 14);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.82)";
-  ctx.font = `600 12px ${fonte}`;
-  ctx.textAlign = "left";
-  ctx.fillText("VALOR A PAGAR AO MEEIRO", padding + 16, y + 24);
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = `700 26px ${fonte}`;
-  ctx.fillText(formatMoeda(dados.valorMeeiro), padding + 16, y + 54);
-  y += altDestaque + 16;
-
-  // Texto de referência do pagamento.
-  ctx.font = `italic 12px ${fonte}`;
-  ctx.fillStyle = "#6B6B65";
-  ctx.textAlign = "left";
-  declaracao.forEach((linha, i) => ctx.fillText(linha, padding, y + i * 16));
-  y += declaracao.length * 16 + 4;
+  // --- Texto de referência do pagamento --------------------------------------
+  const declaracao = doc.setFont("helvetica", "italic").setFontSize(9).splitTextToSize(
+    "Referente ao pagamento pela venda de produtos hortifrutigranjeiros pelo(a) meeiro(a) acima, conforme contrato de parceria agrícola (meação), no período indicado.",
+    contentW
+  );
+  garantirEspaco(declaracao.length * 4.5 + 10);
+  doc.setTextColor(...COR_MUTED);
+  doc.text(declaracao, margin, y);
+  y += declaracao.length * 4.5 + 4;
 
   // Nº de vendas + data de geração.
-  ctx.font = `12px ${fonte}`;
-  ctx.fillStyle = "#8A887F";
-  ctx.fillText(
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...COR_RODAPE);
+  doc.text(
     `${dados.qtdeVendas} venda${dados.qtdeVendas === 1 ? "" : "s"} no período · Gerado em ${formatDataISOparaBR(
       new Date().toISOString().slice(0, 10)
     )}`,
-    padding,
-    y + 10
+    margin,
+    y
   );
-  y += altVendasInfo;
+  y += 12;
 
-  // Uma única linha de assinatura — a do meeiro (não há segunda via aqui).
-  const largAssinatura = Math.min(260, contentW);
-  ctx.strokeStyle = "#C9C7BC";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding, y + 26);
-  ctx.lineTo(padding + largAssinatura, y + 26);
-  ctx.stroke();
-  ctx.font = `600 11.5px ${fonte}`;
-  ctx.fillStyle = "#1A1A1A";
-  ctx.textAlign = "left";
-  ctx.fillText(dados.meeiroNome, padding, y + 42);
-  ctx.font = `10px ${fonte}`;
-  ctx.fillStyle = "#8A887F";
-  ctx.fillText("Assinatura do meeiro", padding, y + 56);
+  // --- Assinatura — só a do meeiro --------------------------------------------
+  garantirEspaco(22);
+  const largAssinatura = Math.min(90, contentW);
+  doc.setDrawColor(200, 199, 188);
+  doc.line(margin, y, margin + largAssinatura, y);
+  y += 5;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...COR_TEXTO);
+  doc.text(dados.meeiroNome || "—", margin, y);
+  y += 4.5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...COR_RODAPE);
+  doc.text("Assinatura do meeiro", margin, y);
 
-  ctx.restore();
-
-  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+  return doc.output("blob");
 }
 
 async function enviarReciboMeeiro(dados) {
-  const blob = await gerarReciboMeeiroPng(dados);
-  if (!blob) {
-    showToast("Não foi possível gerar a imagem do recibo.");
+  let blob;
+  try {
+    blob = await gerarReciboMeeiroPdf(dados);
+  } catch (e) {
+    console.error("Falha ao gerar recibo em PDF:", e);
+    showToast(`Não foi possível gerar o PDF do recibo (${e.message || e}).`);
     return;
   }
-  const nomeArquivo =
-    `recibo-${dados.meeiroNome}-${dados.dataFinal}`.replace(/[^\w-]+/g, "_") + ".png";
-  await compartilharImagem(blob, nomeArquivo);
+  const nomeArquivo = `recibo-${dados.meeiroNome}-${dados.dataFinal}`.replace(/[^\w-]+/g, "_") + ".pdf";
+  await compartilharArquivo(blob, nomeArquivo, "application/pdf", "PDF");
 }

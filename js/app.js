@@ -48,14 +48,14 @@ async function compartilharTexto(texto) {
   window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
 }
 
-// Compartilha uma imagem (o "card" de Fertirrigação gerado em Canvas, ver
-// gerarCardFertiPng em home.js) pelo menu nativo de compartilhamento —
-// mesma ideia do compartilharTexto, mas com arquivo em vez de texto, porque
-// o wa.me não aceita anexar imagem por link. Sem suporte a compartilhar
-// arquivo (a maioria dos navegadores desktop), baixa a imagem e avisa a
-// pessoa pra anexar ela manualmente na conversa do WhatsApp.
-async function compartilharImagem(blob, nomeArquivo) {
-  const file = new File([blob], nomeArquivo, { type: "image/png" });
+// Compartilha um arquivo qualquer (imagem PNG do card de Fertirrigação, PDF
+// do recibo do Meeiro, etc.) pelo menu nativo de compartilhamento — mesma
+// ideia do compartilharTexto, mas com arquivo em vez de texto, porque o
+// wa.me não aceita anexar arquivo por link. Sem suporte a compartilhar
+// arquivo (a maioria dos navegadores desktop), baixa o arquivo e avisa a
+// pessoa pra anexar ele manualmente na conversa do WhatsApp.
+async function compartilharArquivo(blob, nomeArquivo, mimeType, rotulo = "Arquivo") {
+  const file = new File([blob], nomeArquivo, { type: mimeType });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file] });
@@ -73,7 +73,13 @@ async function compartilharImagem(blob, nomeArquivo) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  showToast("Imagem baixada — anexe ela numa conversa do WhatsApp.");
+  showToast(`${rotulo} baixado — anexe ele numa conversa do WhatsApp.`);
+}
+
+// Mantido por compatibilidade com quem já chamava especificamente por imagem
+// (ver gerarCardFertiPng em home.js) — só repassa pro genérico acima.
+async function compartilharImagem(blob, nomeArquivo) {
+  return compartilharArquivo(blob, nomeArquivo, "image/png", "Imagem");
 }
 
 function showToast(message, ms = 2800) {
