@@ -14,6 +14,7 @@ const ScreenEstoque = {
       <div class="search-bar">
         <input type="search" id="busca-produto" placeholder="Buscar produto..." />
       </div>
+      <button type="button" class="btn btn-secondary btn-lg estoque-btn-inventario" id="btn-gerar-inventario">📋 Gerar inventário</button>
       <div id="estoque-grupo-label" class="estoque-grupo-label"></div>
       <div id="estoque-valor-total" class="estoque-valor-total"></div>
       <div id="estoque-list"></div>
@@ -24,6 +25,7 @@ const ScreenEstoque = {
     const grupoLabel = container.querySelector("#estoque-grupo-label");
     const valorTotalEl = container.querySelector("#estoque-valor-total");
     const input = container.querySelector("#busca-produto");
+    const btnInventario = container.querySelector("#btn-gerar-inventario");
 
     const GRUPO_KEY = acharChaveGrupo(produtos);
     // Coluna K (Valor em Estoque) — se a planilha não tiver essa coluna
@@ -143,8 +145,156 @@ const ScreenEstoque = {
 
     input.addEventListener("input", () => renderListSeguro(input.value));
     renderListSeguro();
+
+    btnInventario.addEventListener("click", async () => {
+      btnInventario.disabled = true;
+      btnInventario.textContent = "Gerando...";
+      try {
+        // "Saldo diferente de zero" (não só positivo) — inclui produto com
+        // saldo negativo na contagem também, pra pessoa conferir e ajustar.
+        const itens = produtos
+          .filter((p) => p["Produto"] && Number(p["Estoque"]) !== 0)
+          .sort((a, b) => a["Produto"].localeCompare(b["Produto"], "pt-BR"));
+        if (itens.length === 0) {
+          showToast("Nenhum produto com saldo em estoque pra gerar inventário.");
+          return;
+        }
+        const blob = await gerarInventarioPdf(itens, { unidadeValida, formatNumeroEstoque });
+        const nomeArquivo = `inventario-${new Date().toISOString().slice(0, 10)}.pdf`;
+        await compartilharArquivo(blob, nomeArquivo, "application/pdf", "PDF");
+      } catch (e) {
+        console.error("Falha ao gerar inventário:", e);
+        showToast(`Não foi possível gerar o inventário (${e.message || e}).`);
+      } finally {
+        btnInventario.disabled = false;
+        btnInventario.textContent = "📋 Gerar inventário";
+      }
+    });
   },
 };
+
+// Gera o PDF de contagem de inventário — lista em ordem alfabética todo
+// produto com saldo diferente de zero, com o saldo do sistema e uma coluna
+// em branco pra anotar a contagem física à mão (impresso ou aberto no
+// celular durante a contagem). Pagina automaticamente, igual ao recibo do
+// Meeiro (mesmo padrão de garantirEspaco/redesenhar cabeçalho da tabela).
+async function gerarInventarioPdf(itens, { unidadeValida, formatNumeroEstoque }) {
+  if (typeof window.jspdf === "undefined" || !window.jspdf.jsPDF) {
+    throw new Error("Biblioteca de PDF não carregou (sem internet na primeira vez que o app abriu?).");
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  const margin = 15;
+  const pageW = 210;
+  const contentW = pageW - margin * 2;
+  const bottomLimit = 282;
+
+  const COR_VERDE = [31, 61, 43];
+  const COR_TEXTO = [26, 26, 26];
+  const COR_MUTED = [107, 107, 101];
+  const COR_RODAPE = [138, 136, 127];
+  const COR_BORDA = [222, 220, 210];
+  const COR_ZEBRA = [250, 249, 246];
+
+  let y = margin;
+  let pagina = 1;
+
+  const novaPagina = () => {
+    doc.addPage();
+    pagina += 1;
+    y = margin;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...COR_RODAPE);
+    doc.text(`Inventário — continuação (pág. ${pagina})`, margin, y);
+    y += 8;
+  };
+  const tracejada = (yy) => {
+    doc.setDrawColor(...COR_BORDA);
+    doc.setLineDashPattern([0.8, 0.8], 0);
+    doc.line(margin, yy, margin + contentW, yy);
+    doc.setLineDashPattern([], 0);
+  };
+
+  // Cabeçalho (só na 1ª página).
+  doc.setFillColor(...COR_VERDE);
+  doc.rect(0, 0, pageW, 20, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Inventário de Estoque", margin, 13);
+  y = 30;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...COR_MUTED);
+  doc.text(
+    `${itens.length} produto${itens.length === 1 ? "" : "s"} com saldo · Gerado em ${new Date().toLocaleDateString("pt-BR")}`,
+    margin,
+    y
+  );
+  y += 10;
+
+  // Colunas: Produto (mais larga), Saldo em Estoque (sistema), Contagem
+  // (em branco — a pessoa preenche à mão durante a contagem física).
+  const colProduto = { x: 0, w: 100 };
+  const colSaldo = { x: 102, w: 40 };
+  const colContagem = { x: 146, w: 34 };
+  const cx = (col) => margin + col.x;
+  const altLinha = 8;
+
+  const desenharCabecalhoTabela = () => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...COR_RODAPE);
+    doc.text("Produto", cx(colProduto), y);
+    doc.text("Saldo (sistema)", cx(colSaldo) + colSaldo.w, y, { align: "right" });
+    doc.text("Contagem", cx(colContagem) + colContagem.w / 2, y, { align: "center" });
+    y += 2;
+    tracejada(y);
+    y += 4;
+  };
+
+  desenharCabecalhoTabela();
+
+  const garantirEspacoLinha = () => {
+    if (y + altLinha + 2 > bottomLimit) {
+      novaPagina();
+      desenharCabecalhoTabela();
+    }
+  };
+
+  itens.forEach((p, idx) => {
+    garantirEspacoLinha();
+
+    if (idx % 2 === 1) {
+      doc.setFillColor(...COR_ZEBRA);
+      doc.rect(margin, y - 5, contentW, altLinha, "F");
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...COR_TEXTO);
+    doc.text(truncarTextoPdf(doc, p["Produto"] || "—", colProduto.w - 2), cx(colProduto), y);
+    const saldoTexto = `${formatNumeroEstoque(p["Estoque"])} ${unidadeValida(p["Unidade"]) || ""}`.trim();
+    doc.text(saldoTexto, cx(colSaldo) + colSaldo.w, y, { align: "right" });
+
+    // Caixinha em branco pra escrever a contagem física.
+    doc.setDrawColor(...COR_BORDA);
+    doc.roundedRect(cx(colContagem) + 2, y - 5, colContagem.w - 4, altLinha - 1.5, 1, 1);
+
+    y += altLinha;
+  });
+
+  y += 4;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...COR_RODAPE);
+  if (y + 6 > bottomLimit) novaPagina();
+  doc.text("App Campo — Peterfrut", margin, y);
+
+  return doc.output("blob");
+}
 
 // Número com separador brasileiro (ponto de milhar, vírgula decimal), sem
 // zeros à direita desnecessários — usado no saldo de estoque.

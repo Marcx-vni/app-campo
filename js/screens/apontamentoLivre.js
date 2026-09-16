@@ -293,13 +293,18 @@ const ScreenApontamentoLivre = {
       `;
     };
 
-    // D.A.T sugerido: só preenche sozinho se o campo estiver vazio, pra não
-    // apagar um valor que a pessoa já tenha corrigido manualmente.
+    // D.A.T sugerido: recalcula sozinho toda vez que estufa/data mudam, mas
+    // pára de mexer assim que a pessoa digitar algo nele à mão (datEditadoPeloUsuario).
+    // Antes disso só checava "campo vazio" — só funcionava na primeira vez,
+    // porque depois de preenchido automaticamente o campo nunca mais ficava
+    // vazio, então trocar de estufa depois não recalculava nada (ficava
+    // travado no valor da estufa escolhida antes).
+    let datEditadoPeloUsuario = false;
     const sugerirDAT = () => {
       const campoData = form.querySelector("#f-dat");
-      if (!campoData || campoData.value !== "") return;
+      if (!campoData || datEditadoPeloUsuario) return;
       const dat = calcularDAT(lookups, resolverEstufaNome(), form.querySelector("#f-data").value);
-      if (dat !== null) campoData.value = dat;
+      campoData.value = dat !== null ? dat : "";
     };
 
     // Total ao vivo (Quantidade × Valor unitário) em Venda/Compra — só pra
@@ -342,6 +347,9 @@ const ScreenApontamentoLivre = {
     if (this.bloco === "Ferti") {
       form.querySelector("#f-dosagem-ferti").addEventListener("input", atualizarCalculoFerti);
       form.querySelector("#f-data").addEventListener("change", sugerirDAT);
+      form.querySelector("#f-dat").addEventListener("input", () => {
+        datEditadoPeloUsuario = true;
+      });
     }
 
     if (this.bloco === "Venda" || this.bloco === "Compra") {
