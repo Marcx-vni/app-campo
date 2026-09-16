@@ -260,7 +260,7 @@ async function fetchLookupData() {
       readTable(TABLES.meeiros),
       readTable(TABLES.estufas),
       readTable(TABLES.operacao),
-      readTable(TABLES.ordens),
+      readTable(TABLES.ordens).catch(() => []), // "Minhas Ordens" foi removida da navegação — tabela pode nem existir mais na planilha, não pode travar o carregamento do resto
       readTable(TABLES.fornecedor),
       readTable(TABLES.cliente).catch(() => []), // tabela pequena, pode não existir em toda planilha
       readTable(TABLES.plantio).catch(() => []), // usado pra validar/achar o plantio Ativo da estufa

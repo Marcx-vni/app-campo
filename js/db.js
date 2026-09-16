@@ -72,17 +72,26 @@ async function getLookupData() {
   // uma vez salvo, nunca era atualizado de novo mesmo com internet, o que
   // deixava o app preso em listas antigas (ex.: Meeiros sem o campo de
   // código correto) mesmo depois de corrigido o código do app.
+  let erroDeRede = null;
   if (navigator.onLine) {
     try {
       return await refreshLookupCache();
     } catch (e) {
-      // rede indisponível/instável mesmo com navigator.onLine true — cai pro cache abaixo
+      // Guarda o erro real (pode ser falha de rede, mas também pode ser um
+      // 404/403 do Graph por causa de alguma tabela renomeada/apagada na
+      // planilha, sessão expirada etc.) — cai pro cache abaixo, mas se o
+      // cache também não existir, é melhor mostrar essa causa real do que
+      // um "sem conexão" genérico e enganoso.
+      erroDeRede = e;
     }
   }
   const keys = ["produtos", "produtosVenda", "meeiros", "estufas", "operacoes", "ordens", "fornecedores", "clientes", "plantio"];
   const cached = await Promise.all(keys.map((k) => cacheGet(k)));
   if (cached.every((v) => v && v.length !== undefined)) {
     return Object.fromEntries(keys.map((k, i) => [k, cached[i]]));
+  }
+  if (erroDeRede) {
+    throw new Error(`Não foi possível carregar as listas da planilha (${erroDeRede.message || erroDeRede}).`);
   }
   throw new Error("Sem conexão e sem dados salvos localmente ainda — abra o app uma vez com internet.");
 }
