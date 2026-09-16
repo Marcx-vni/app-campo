@@ -250,7 +250,7 @@ async function gerarInventarioPdf(itens, { unidadeValida, formatNumeroEstoque })
     doc.setTextColor(...COR_RODAPE);
     doc.text("Produto", cx(colProduto), y);
     doc.text("Saldo (sistema)", cx(colSaldo) + colSaldo.w, y, { align: "right" });
-    doc.text("Contagem", cx(colContagem) + colContagem.w / 2, y, { align: "center" });
+    doc.text("Contagem", cx(colContagem), y);
     y += 2;
     tracejada(y);
     y += 4;
@@ -279,9 +279,13 @@ async function gerarInventarioPdf(itens, { unidadeValida, formatNumeroEstoque })
     const saldoTexto = `${formatNumeroEstoque(p["Estoque"])} ${unidadeValida(p["Unidade"]) || ""}`.trim();
     doc.text(saldoTexto, cx(colSaldo) + colSaldo.w, y, { align: "right" });
 
-    // Caixinha em branco pra escrever a contagem física.
+    // Caixinha em branco pra escrever a contagem física — ancorada no MESMO x
+    // do cabeçalho "Contagem" (cx(colContagem)), pra garantir que a borda
+    // esquerda da caixa fique exatamente embaixo do início do texto do
+    // cabeçalho (antes cada um usava uma fórmula de centralização própria,
+    // que na teoria batia mas na prática ficava visualmente desalinhado).
     doc.setDrawColor(...COR_BORDA);
-    doc.roundedRect(cx(colContagem) + 2, y - 5, colContagem.w - 4, altLinha - 1.5, 1, 1);
+    doc.roundedRect(cx(colContagem), y - 5, colContagem.w - 2, altLinha - 1.5, 1, 1);
 
     y += altLinha;
   });
