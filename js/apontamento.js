@@ -118,12 +118,22 @@ function numeroDoSetor(texto) {
 // Quantas plantas cada setor da estufa tem no PLANTIO ATIVO (aba "Setores
 // Ferti") — essa aba guarda o histórico de todos os plantios, então filtra
 // pelo mesmo plantio que plantiosAtivos() já usa em outras validações, senão
-// misturaria setores de safras antigas com a atual.
-function setoresDoPlantioAtivo(lookups, estufaNome) {
+// misturaria setores de safras antigas com a atual. TAMBÉM filtra por meeiro
+// (coluna "Meeiro" da aba) — quando duas parcerias (meeiros) plantam na MESMA
+// estufa, cada uma tem seus próprios setores/plantas cadastrados ali, e sem
+// esse filtro o app misturava os setores de um meeiro com os do outro (bug
+// reportado em 21/09/2026: selecionar José Henrique numa estufa que também
+// tem Rodrigo trazia os setores do Rodrigo).
+function setoresDoPlantioAtivo(lookups, estufaNome, meeiroNome) {
   const plantioAtivo = plantiosAtivos(lookups, estufaNome)[0];
   if (!plantioAtivo) return [];
   return (lookups.setoresFerti || [])
-    .filter((s) => s["Estufa"] === estufaNome && s["Plantio"] === plantioAtivo)
+    .filter(
+      (s) =>
+        s["Estufa"] === estufaNome &&
+        s["Plantio"] === plantioAtivo &&
+        (!meeiroNome || s["Meeiro"] === meeiroNome)
+    )
     .map((s) => ({ setor: numeroDoSetor(s["Setor"]), plantas: Number(s["Plantas"]) || 0 }))
     .filter((s) => s.setor && s.setor >= 1 && s.setor <= 6)
     .sort((a, b) => a.setor - b.setor);
@@ -142,11 +152,11 @@ function arredondarGramasFerti(valor) {
 // 1.000 × dosagem informada (mesma fórmula da aba "Registro Ferti", coluna
 // "Setor N"). Devolve um objeto { "Qtde Setor 1": valor, ... } pronto pra
 // entrar em `fields` — setor sem planta ativa fica null (planilha ignora).
-function calcularSetoresFerti(lookups, estufaNome, dosagem) {
+function calcularSetoresFerti(lookups, estufaNome, dosagem, meeiroNome) {
   const dosagemNum = Number(dosagem) || 0;
   const resultado = {};
   SETOR_FIELDS.forEach((_, i) => (resultado[`Qtde Setor ${i + 1}`] = null));
-  setoresDoPlantioAtivo(lookups, estufaNome).forEach((s) => {
+  setoresDoPlantioAtivo(lookups, estufaNome, meeiroNome).forEach((s) => {
     resultado[`Qtde Setor ${s.setor}`] = arredondarGramasFerti((s.plantas / 1000) * dosagemNum);
   });
   return resultado;

@@ -175,7 +175,7 @@ const ScreenApontamentoLivre = {
 
       <label>🧴 Produto</label>
       <div id="f-produto-combo"></div>
-      ${this.bloco === "Uso" ? `<div id="produto-saldo-info" class="produto-saldo-info"></div>` : ""}
+      ${this.bloco === "Uso" || this.bloco === "Ferti" ? `<div id="produto-saldo-info" class="produto-saldo-info"></div>` : ""}
 
       ${camposEspecificos}
 
@@ -260,6 +260,15 @@ const ScreenApontamentoLivre = {
       return match ? match["Estufa"] : null;
     };
 
+    // Idem, pro Meeiro — precisa do NOME (não do código) porque é assim que a
+    // aba "Setores Ferti" identifica de quem são os setores/plantas daquela
+    // estufa (cada meeiro tem os seus, mesmo quando dividem a mesma estufa).
+    const resolverMeeiroNome = () => {
+      const val = meeiroCombo ? meeiroCombo.getValue() : null;
+      const match = val ? lookups.meeiros.find((m) => String(m.__cod) === String(val)) : null;
+      return match ? match["Meeiro"] : null;
+    };
+
     // Recalcula a lista "Quantidade por setor" da Fertirrigação toda vez que
     // a Estufa ou a Dosagem mudam — só existe quando bloco === "Ferti".
     const atualizarCalculoFerti = () => {
@@ -270,9 +279,12 @@ const ScreenApontamentoLivre = {
         calcEl.innerHTML = `<div class="empty-state">Escolha a estufa pra calcular.</div>`;
         return;
       }
-      const setores = setoresDoPlantioAtivo(lookups, estufaNome);
+      const meeiroNome = resolverMeeiroNome();
+      const setores = setoresDoPlantioAtivo(lookups, estufaNome, meeiroNome);
       if (setores.length === 0) {
-        calcEl.innerHTML = `<div class="empty-state">Nenhum setor com plantio ativo encontrado pra ${escapeHtml(estufaNome)}.</div>`;
+        calcEl.innerHTML = `<div class="empty-state">Nenhum setor com plantio ativo encontrado pra ${escapeHtml(
+          estufaNome
+        )}${meeiroNome ? ` / ${escapeHtml(meeiroNome)}` : ""}.</div>`;
         return;
       }
       const dosagem = Number(form.querySelector("#f-dosagem-ferti")?.value) || 0;
@@ -325,6 +337,11 @@ const ScreenApontamentoLivre = {
       meeiroCombo = criarComboBusca(form.querySelector("#f-meeiro-combo"), meeiroOpcoes, {
         placeholder: "Buscar meeiro...",
         valorInicial: meeiroCod,
+        // No Ferti, trocar de meeiro muda quais setores/plantas entram na
+        // conta (cada meeiro tem os seus, mesmo dividindo a mesma estufa) —
+        // sem isso o cálculo ficava com os setores de quem estava selecionado
+        // antes, ou nem recalculava ao trocar só o meeiro.
+        onChange: this.bloco === "Ferti" ? () => atualizarCalculoFerti() : undefined,
       });
       estufaCombo = criarComboBusca(form.querySelector("#f-estufa-combo"), estufaOpcoes, {
         placeholder: "Buscar estufa...",
@@ -402,7 +419,8 @@ const ScreenApontamentoLivre = {
         // é gravado é sempre a conta mais atual (estufa/dosagem podem ter
         // mudado desde o último recálculo visual).
         const estufaNomeAtual = lookups.estufas.find((e) => String(e.__cod) === String(fields["Código Estufa"]))?.["Estufa"];
-        Object.assign(fields, calcularSetoresFerti(lookups, estufaNomeAtual, dosagem));
+        const meeiroNomeAtual = lookups.meeiros.find((m) => String(m.__cod) === String(fields["Código Meeiro"]))?.["Meeiro"];
+        Object.assign(fields, calcularSetoresFerti(lookups, estufaNomeAtual, dosagem, meeiroNomeAtual));
         const datInformado = form.querySelector("#f-dat").value;
         fields["D.A.T"] =
           datInformado !== "" ? Number(datInformado) : calcularDAT(lookups, estufaNomeAtual, fields["Data"]);
