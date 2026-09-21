@@ -300,8 +300,14 @@ async function desenharPaginasRecibo(blob, containerEl, aindaValido) {
   const buffer = await blob.arrayBuffer();
   if (!aindaValido()) return;
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-  // Escala pra caber na largura do container, considerando telas retina.
-  const larguraAlvo = Math.min(containerEl.clientWidth || 360, 480) * (window.devicePixelRatio || 1);
+  // Escala pra caber na largura do container, considerando telas retina. O
+  // teto era 480px, o que deixava a pré-visualização borrada em telas
+  // maiores (computador): o container podia ter 700-900px de largura em CSS,
+  // mas o canvas era desenhado com no máximo 480px de resolução e depois
+  // esticado pelo CSS (width: 100%) — daí a imagem ficar ilegível. Agora usa
+  // a largura real do container (com um teto bem mais alto, só pra não gerar
+  // um canvas gigantesco em monitores ultra largos).
+  const larguraAlvo = Math.min(containerEl.clientWidth || 360, 1400) * (window.devicePixelRatio || 1);
 
   for (let numPagina = 1; numPagina <= pdf.numPages; numPagina++) {
     if (!aindaValido()) return;
@@ -342,6 +348,48 @@ function truncarTextoPdf(doc, texto, larguraMaxMM) {
     cortado = cortado.slice(0, -1);
   }
   return cortado + "…";
+}
+
+// Junta linhas de venda do mesmo dia + mesmo cliente + mesmo produto num
+// único lançamento no extrato do recibo (soma Qtde., Vlr. Caixa, Funrural,
+// Total Venda e Total Líquida) — pedido do usuário pra não poluir o recibo
+// com duas linhas idênticas quando a mesma venda foi lançada em partes (ex.:
+// duas entregas do mesmo produto pro mesmo cliente no mesmo dia). Preço Venda
+// exibido no grupo é a média ponderada (Total Venda ÷ Qtde. somada), que bate
+// com o unitário quando as linhas originais já tinham o mesmo preço — que é
+// o caso normal. Mantém a ordem de primeira aparição (vendas já chegam
+// ordenadas por data).
+function agruparVendasParaExtrato(vendas) {
+  const grupos = new Map();
+  const ordemChaves = [];
+  vendas.forEach((r) => {
+    const chave = [
+      r["Data"],
+      String(r["Cliente"] || "").trim().toUpperCase(),
+      String(r["Descricao"] || "").trim().toUpperCase(),
+    ].join("|");
+    let grupo = grupos.get(chave);
+    if (!grupo) {
+      grupo = {
+        data: r["Data"],
+        cliente: r["Cliente"],
+        produto: r["Descricao"],
+        qtde: 0,
+        embalagem: 0,
+        funrural: 0,
+        totalVenda: 0,
+        totalLiquida: 0,
+      };
+      grupos.set(chave, grupo);
+      ordemChaves.push(chave);
+    }
+    grupo.qtde += Number(r["Qtde."]) || 0;
+    grupo.embalagem += Number(r["Valor Caixa"]) || 0;
+    grupo.funrural += meeiroFunruralLinha(r);
+    grupo.totalVenda += Number(r["Total Venda"]) || 0;
+    grupo.totalLiquida += meeiroTotalComFunrural(r);
+  });
+  return ordemChaves.map((chave) => grupos.get(chave));
 }
 
 async function gerarReciboMeeiroPdf(dados) {
@@ -450,10 +498,16 @@ async function gerarReciboMeeiroPdf(dados) {
     y += 4;
   };
 
+  const linhasExtrato = agruparVendasParaExtrato(vendas);
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...COR_MUTED);
-  doc.text(`EXTRATO DAS VENDAS · ${vendas.length} LANÇAMENTO${vendas.length === 1 ? "" : "S"}`, margin, y);
+  doc.text(
+    `EXTRATO DAS VENDAS · ${linhasExtrato.length} LANÇAMENTO${linhasExtrato.length === 1 ? "" : "S"}`,
+    margin,
+    y
+  );
   y += 6;
   desenharCabecalhoTabela();
 
@@ -464,30 +518,29 @@ async function gerarReciboMeeiroPdf(dados) {
     }
   };
 
-  vendas.forEach((r, idx) => {
+  linhasExtrato.forEach((g, idx) => {
     garantirEspacoTabela();
 
     if (idx % 2 === 1) {
       doc.setFillColor(...COR_ZEBRA);
       doc.rect(margin, y - 4, contentW, altLinhaTabela, "F");
     }
-    const embalagem = Number(r["Valor Caixa"]) || 0;
-    const funrural = meeiroFunruralLinha(r);
+    const precoMedio = g.qtde > 0 ? g.totalVenda / g.qtde : 0;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(...COR_TEXTO);
-    doc.text(formatExcelDate(r["Data"]), cx(colData), y);
-    doc.text(truncarTextoPdf(doc, r["Cliente"] || "—", colCliente.w - 2), cx(colCliente), y);
-    doc.text(truncarTextoPdf(doc, r["Descricao"] || "—", colProduto.w - 2), cx(colProduto), y);
-    doc.text(formatQtdePdf(r["Qtde."]), cx(colQtde) + colQtde.w, y, { align: "right" });
-    doc.text(formatMoeda(embalagem), cx(colCaixa) + colCaixa.w, y, { align: "right" });
-    doc.setTextColor(...(funrural > 0 ? COR_VERMELHO : COR_MUTED));
-    doc.text(formatMoeda(funrural), cx(colFunrural) + colFunrural.w, y, { align: "right" });
+    doc.text(formatExcelDate(g.data), cx(colData), y);
+    doc.text(truncarTextoPdf(doc, g.cliente || "—", colCliente.w - 2), cx(colCliente), y);
+    doc.text(truncarTextoPdf(doc, g.produto || "—", colProduto.w - 2), cx(colProduto), y);
+    doc.text(formatQtdePdf(g.qtde), cx(colQtde) + colQtde.w, y, { align: "right" });
+    doc.text(formatMoeda(g.embalagem), cx(colCaixa) + colCaixa.w, y, { align: "right" });
+    doc.setTextColor(...(g.funrural > 0 ? COR_VERMELHO : COR_MUTED));
+    doc.text(formatMoeda(g.funrural), cx(colFunrural) + colFunrural.w, y, { align: "right" });
     doc.setTextColor(...COR_TEXTO);
-    doc.text(formatMoeda(meeiroValorUnitVenda(r)), cx(colPreco) + colPreco.w, y, { align: "right" });
-    doc.text(formatMoeda(Number(r["Total Venda"]) || 0), cx(colTotalVenda) + colTotalVenda.w, y, { align: "right" });
+    doc.text(formatMoeda(precoMedio), cx(colPreco) + colPreco.w, y, { align: "right" });
+    doc.text(formatMoeda(g.totalVenda), cx(colTotalVenda) + colTotalVenda.w, y, { align: "right" });
     doc.setFont("helvetica", "bold");
-    doc.text(formatMoeda(meeiroTotalComFunrural(r)), cx(colTotalLiq) + colTotalLiq.w, y, { align: "right" });
+    doc.text(formatMoeda(g.totalLiquida), cx(colTotalLiq) + colTotalLiq.w, y, { align: "right" });
     y += altLinhaTabela;
     tracejada(y - 2);
   });
