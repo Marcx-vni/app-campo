@@ -14,7 +14,10 @@ const ScreenEstoque = {
       <div class="search-bar">
         <input type="search" id="busca-produto" placeholder="Buscar produto..." />
       </div>
-      <button type="button" class="btn btn-secondary btn-lg estoque-btn-inventario" id="btn-gerar-inventario">📋 Gerar inventário</button>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" id="btn-cadastro-produto">🧾 Cadastro de Produto</button>
+        <button type="button" class="btn btn-secondary" id="btn-gerar-inventario">📋 Gerar inventário</button>
+      </div>
       <div id="estoque-grupo-label" class="estoque-grupo-label"></div>
       <div id="estoque-valor-total" class="estoque-valor-total"></div>
       <div id="estoque-list"></div>
@@ -26,6 +29,7 @@ const ScreenEstoque = {
     const valorTotalEl = container.querySelector("#estoque-valor-total");
     const input = container.querySelector("#busca-produto");
     const btnInventario = container.querySelector("#btn-gerar-inventario");
+    const btnCadastro = container.querySelector("#btn-cadastro-produto");
 
     const GRUPO_KEY = acharChaveGrupo(produtos);
     // Coluna K (Valor em Estoque) — se a planilha não tiver essa coluna
@@ -170,8 +174,116 @@ const ScreenEstoque = {
         btnInventario.textContent = "📋 Gerar inventário";
       }
     });
+
+    btnCadastro.addEventListener("click", () => {
+      abrirModalCadastroProduto(produtos, GRUPO_KEY, async () => {
+        // Recarrega tudo (busca de novo na planilha, já pega o produto recém
+        // criado) e re-renderiza a tela inteira — mesmo padrão usado depois de
+        // gravar um apontamento em apontamentoLivre.js.
+        await getLookupData();
+        this.render(container);
+      });
+    });
   },
 };
+
+// --- Cadastro de novo produto (aba "Cadastro de Produtos E Estoque") -------
+// Botão "🧾 Cadastro de Produto" na tela Estoque. Diferente dos apontamentos
+// (Uso/Ferti/Venda/Compra), isso NÃO passa pela fila offline em IndexedDB —
+// grava direto via Graph (addTableRow), então exige estar online. Só pede o
+// que o usuário informa (Produto/Grupo/Dosagem); "Código" é calculado
+// sozinho (maior código existente + 1) e as demais colunas da tabela (ex.:
+// "Estoque", "Valor em Estoque") ficam em branco de propósito — são colunas
+// calculadas por fórmula na planilha, o app nunca escreve nelas (mesmo
+// padrão de REGISTRO_INVENTARIO_COMPUTED em apontamento.js).
+function proximoCodigoProduto(produtos) {
+  let max = 0;
+  (produtos || []).forEach((p) => {
+    const v = Number(p["Código"]);
+    if (!Number.isNaN(v) && v > max) max = v;
+  });
+  return max + 1;
+}
+
+function abrirModalCadastroProduto(produtos, grupoKey, onSalvo) {
+  const gruposExistentes = [
+    ...new Set(
+      (produtos || [])
+        .map((p) => (p[grupoKey] ? String(p[grupoKey]).trim() : ""))
+        .filter(Boolean)
+    ),
+  ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-titulo">🧾 Cadastro de Produto</div>
+      <form id="form-cadastro-produto">
+        <label>Produto</label>
+        <input type="text" id="cp-produto" required />
+        <label>Grupo</label>
+        <select id="cp-grupo" required>
+          <option value="">Selecione...</option>
+          ${gruposExistentes.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("")}
+        </select>
+        <label>Dosagem (mL) por 20L</label>
+        <input type="number" step="0.01" id="cp-dosagem" required />
+        <div class="btn-row">
+          <button type="button" class="btn btn-secondary" id="cp-cancelar">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="cp-salvar">Salvar</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const fechar = () => overlay.remove();
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) fechar();
+  });
+  overlay.querySelector("#cp-cancelar").addEventListener("click", fechar);
+
+  overlay.querySelector("#form-cadastro-produto").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const nomeProduto = overlay.querySelector("#cp-produto").value.trim();
+    const grupo = overlay.querySelector("#cp-grupo").value;
+    const dosagem = overlay.querySelector("#cp-dosagem").value;
+    if (!nomeProduto || !grupo || dosagem === "") {
+      showToast("Preencha Produto, Grupo e Dosagem antes de salvar.");
+      return;
+    }
+    if (!navigator.onLine) {
+      showToast("Sem conexão — o cadastro de produto precisa de internet.");
+      return;
+    }
+    const btnSalvar = overlay.querySelector("#cp-salvar");
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = "Salvando...";
+    try {
+      const proximoCodigo = proximoCodigoProduto(produtos);
+      const headers = produtos.headers || [];
+      const valores = {
+        "Código": proximoCodigo,
+        "Produto": nomeProduto,
+        [grupoKey]: grupo,
+        "Dosagem ML/20LT": Number(dosagem) || 0,
+      };
+      const linha = headers.map((h) =>
+        Object.prototype.hasOwnProperty.call(valores, h) ? valores[h] : null
+      );
+      await addTableRow(TABLES.produtos, linha);
+      showToast(`Produto "${nomeProduto}" cadastrado (código ${proximoCodigo}).`);
+      fechar();
+      await onSalvo();
+    } catch (e) {
+      console.error("Falha ao cadastrar produto:", e);
+      showToast(`Não foi possível cadastrar o produto (${e.message || e}).`);
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = "Salvar";
+    }
+  });
+}
 
 // Gera o PDF de contagem de inventário — lista em ordem alfabética todo
 // produto com saldo diferente de zero, com o saldo do sistema e uma coluna

@@ -529,6 +529,32 @@ textarea { resize: vertical; min-height: 60px; }
 .btn-row .btn { flex: 1; }
 .estoque-btn-inventario { margin-top: 10px; margin-bottom: 4px; }
 
+/* --- Modal genérico (ex.: Cadastro de Produto na tela Estoque) --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 26, 26, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 200;
+}
+.modal-card {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--card-bg);
+  border-radius: 16px 16px 0 0;
+  padding: 20px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 560px) {
+  .modal-overlay { align-items: center; }
+  .modal-card { border-radius: var(--radius); padding: 20px; }
+}
+.modal-titulo { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.modal-card .btn-row { margin-top: 20px; }
+
 /* --- Bloco selector (segmented control) --- */
 .bloco-tabs {
   display: flex;
