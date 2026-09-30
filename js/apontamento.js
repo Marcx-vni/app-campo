@@ -86,6 +86,11 @@ const REQUIRED_FIELDS = {
   Ferti: ["Bloco", "Data", "Código Meeiro", "Código Estufa", "Produto", "Dosagem Ferti"], // + ao menos 1 setor
   Venda: ["Bloco", "Data", "Código Meeiro", "Código Estufa", "Produto", "Operação", "Quantidade", "Valor Unitário", "Cliente"],
   Compra: ["Bloco", "Data", "Produto", "Operação", "Quantidade", "Valor Unitário", "Fornecedor"],
+  // Conta a pagar SEM relação com estoque (ex.: serviço, despesa avulsa) — só
+  // grava na aba Financeiro, nunca no Registro de Inventario. Por isso
+  // "Produto" aqui é texto livre (não vem do Cadastro de Produtos) — ver
+  // validateBeforeSend/prepararRegistro, que tratam esse bloco à parte.
+  Financeiro: ["Bloco", "Data", "Produto", "Quantidade", "Valor Unitário", "Fornecedor"],
 };
 
 const SETOR_FIELDS = ["Qtde Setor 1", "Qtde Setor 2", "Qtde Setor 3", "Qtde Setor 4", "Qtde Setor 5", "Qtde Setor 6"];
@@ -213,7 +218,10 @@ function validateBeforeSend(fields, lookups) {
   if (fields["Código Estufa"] && !acharPorCod(lookups.estufas, fields["Código Estufa"])) {
     return "Estufa inexistente";
   }
-  if (fields["Produto"]) {
+  // No bloco Financeiro, Produto é texto livre (despesa sem cadastro/estoque
+  // por trás) — não faz sentido nem é possível validar contra o Cadastro de
+  // Produtos, então pula essa checagem só pra esse bloco.
+  if (fields["Produto"] && bloco !== "Financeiro") {
     // Na Venda, o produto vem do Cadastro de Vendas (ProdVenda) — não do
     // cadastro geral de insumos (Tabela613), que é outra lista.
     const encontrado =
@@ -294,6 +302,9 @@ function prepararRegistro(fields, lookups, seq, usuario) {
       tipoProduto = p["GRUPO"]; // classificação (ex.: PIMENTAO/TOMATE)
       descricaoProduto = p["Tipo"]; // nome do produto (ex.: P.VERMELHO) — cabeçalho confuso, é da planilha original
     }
+  } else if (bloco === "Financeiro") {
+    // Texto livre, não vem do Cadastro de Produtos — não há o que procurar.
+    descricaoProduto = fields["Produto"] || null;
   } else {
     const p = achar(lookups.produtos, "Produto", fields["Produto"]);
     if (p) {
@@ -406,11 +417,34 @@ function prepararRegistro(fields, lookups, seq, usuario) {
       "Usuario": usuario,
       "Gravado em": toExcelSerialDateTime(agora),
     };
+  } else if (bloco === "Financeiro") {
+    // Conta a pagar SEM estoque por trás (ex.: serviço, despesa avulsa) — só
+    // grava na aba Financeiro. NÃO grava no Registro de Inventario (por isso
+    // `inventario` é zerado logo abaixo) nem usa "Seq Inventario" pra ligar
+    // os dois (não existe o outro lado pra ligar).
+    inventario = null;
+    const quantidade = Number(fields["Quantidade"]) || 0;
+    const valorUnitario = Number(fields["Valor Unitário"]) || 0;
+    financeiro = {
+      "Seq Inventario": null,
+      "Data Compra": toExcelSerial(fields["Data"]),
+      "Data Vencimento": fields["Data Vencimento"] ? toExcelSerial(fields["Data Vencimento"]) : null,
+      "Fornecedor": fields["Fornecedor"],
+      "Nota Fiscal": fields["Nota Fiscal"] || null,
+      "Produto": descricaoProduto,
+      "Qtde.": quantidade,
+      "Valor Unit.": valorUnitario,
+      "Valor Total": quantidade * valorUnitario,
+      "Status": "A Pagar",
+      "Origem": "App Campo",
+      "Usuario": usuario,
+      "Gravado em": toExcelSerialDateTime(agora),
+    };
   }
 
   return {
     seq,
-    inventario: montarLinha(REGISTRO_INVENTARIO_COLUMNS, REGISTRO_INVENTARIO_COMPUTED, inventario),
+    inventario: inventario ? montarLinha(REGISTRO_INVENTARIO_COLUMNS, REGISTRO_INVENTARIO_COMPUTED, inventario) : null,
     ferti: ferti ? montarLinha(REGISTRO_FERTI_COLUMNS, REGISTRO_FERTI_COMPUTED, ferti) : null,
     financeiro: financeiro ? montarLinha(FINANCEIRO_COLUMNS, FINANCEIRO_COMPUTED, financeiro) : null,
   };

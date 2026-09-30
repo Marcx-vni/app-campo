@@ -57,15 +57,20 @@ async function sendOne(item) {
   // macro no Excel, de forma serial. Gravações de dois aparelhos ao mesmo
   // tempo podem, em teoria, calcular o mesmo próximo número; o risco é baixo
   // pro volume de uso esperado, mas é uma limitação conhecida dessa abordagem.
-  const seq = await proximoSeq(TABLES.registroInventario);
+  // Bloco "Financeiro" (conta a pagar sem estoque) nunca grava no Registro de
+  // Inventario — não precisa nem calcular o próximo "Seq" dele (evita uma
+  // leitura da tabela à toa).
+  const precisaSeqInventario = fields["Bloco"] !== "Financeiro";
+  const seq = precisaSeqInventario ? await proximoSeq(TABLES.registroInventario) : null;
   const { inventario, ferti, financeiro } = prepararRegistro(fields, lookups, seq, usuario);
 
-  const rowIndex = await addTableRow(TABLES.registroInventario, inventario);
+  const rowIndex = inventario ? await addTableRow(TABLES.registroInventario, inventario) : null;
 
-  // Ferti e Compra também gravam num segundo lugar (Registro Ferti / Financeiro).
-  // Se essa segunda gravação falhar, a linha do Inventario já gravada NÃO é
-  // desfeita automaticamente (limitação atual) — o erro fica visível na fila
-  // pra correção manual.
+  // Ferti e Compra também gravam num segundo lugar (Registro Ferti / Financeiro);
+  // o bloco Financeiro grava SÓ no Financeiro (sem linha correspondente no
+  // Inventario). Se essa segunda gravação falhar, a linha do Inventario já
+  // gravada (quando existe) NÃO é desfeita automaticamente (limitação
+  // atual) — o erro fica visível na fila pra correção manual.
   if (ferti) await addTableRow(TABLES.registroFerti, ferti);
   if (financeiro) await addTableRow(TABLES.financeiro, financeiro);
 

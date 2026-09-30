@@ -9,13 +9,17 @@ const BLOCO_SUBTITULOS = {
   Ferti: "Registre uma fertirrigação",
   Venda: "Registre uma venda",
   Compra: "Registre uma entrada de fornecedor",
+  // Diferença chave pro bloco Compra: isso NÃO lança no estoque (Registro de
+  // Inventario) — só na aba Financeiro, pra despesas sem produto de estoque
+  // por trás (ex.: serviço, frete, despesa avulsa).
+  Financeiro: "Registre uma conta a pagar (sem lançar em estoque)",
 };
 
 // "Uso" é o nome da coluna na planilha (não muda — é a chave de dados usada
 // em toda a validação/gravação), mas na tela é mais intuitivo chamar de
 // "Aplicação", que é o que a pessoa de campo realmente está fazendo.
-const BLOCO_LABELS = { Uso: "Aplicação", Ferti: "Fertirrig.", Venda: "Venda", Compra: "Compra" };
-const BLOCO_ICONES = { Uso: "🧪", Ferti: "💧", Venda: "💰", Compra: "🛒" };
+const BLOCO_LABELS = { Uso: "Aplicação", Ferti: "Fertirrig.", Venda: "Venda", Compra: "Compra", Financeiro: "Financeiro" };
+const BLOCO_ICONES = { Uso: "🧪", Ferti: "💧", Venda: "💰", Compra: "🛒", Financeiro: "💵" };
 
 // Lembrete dos últimos valores escolhidos — em Ferti/Aplicação/Venda quase
 // sempre é a mesma estufa/meeiro em sequência (várias aplicações seguidas no
@@ -39,7 +43,7 @@ const ScreenApontamentoLivre = {
       <h2 class="page-title">Apontamento Livre</h2>
       <p class="page-subtitle">${BLOCO_SUBTITULOS[this.bloco]}</p>
       <div class="bloco-tabs">
-        ${["Uso", "Ferti", "Venda", "Compra"]
+        ${["Uso", "Ferti", "Venda", "Compra", "Financeiro"]
           .map(
             (b) =>
               `<div class="bloco-tab ${b === this.bloco ? "active" : ""}" data-bloco="${b}"><span class="bloco-tab-icone">${BLOCO_ICONES[b]}</span><span class="bloco-tab-label">${BLOCO_LABELS[b]}</span></div>`
@@ -163,19 +167,41 @@ const ScreenApontamentoLivre = {
         <label>🧾 Nota fiscal (opcional)</label>
         <input type="text" id="f-nota-fiscal" value="${escapeHtml(localStorage.getItem(NOTA_FISCAL_STORAGE_KEY) || "")}" />
       `;
+    } else if (this.bloco === "Financeiro") {
+      // Igual ao bloco Compra, MENOS o vínculo com estoque: Produto aqui é
+      // texto livre (não vem do Cadastro), e não existe "Operação" nem
+      // "Código Estufa"/"Código Meeiro" — essa conta nunca toca o Registro de
+      // Inventario (ver prepararRegistro em js/apontamento.js).
+      camposEspecificos = `
+        <label>⚖️ Quantidade</label>
+        <input type="number" step="0.01" id="f-quantidade" required />
+        <label>💲 Valor unitário</label>
+        <input type="number" step="0.01" id="f-valor-unitario" required />
+        <div id="financeiro-total-calc" class="total-calc-info">Total da compra: —</div>
+        <label>🏭 Fornecedor</label>
+        <div id="f-fornecedor-combo"></div>
+        <label>📅 Data de vencimento (opcional)</label>
+        <input type="date" id="f-vencimento" />
+        <label>🧾 Nota fiscal (opcional)</label>
+        <input type="text" id="f-nota-fiscal" value="${escapeHtml(localStorage.getItem(NOTA_FISCAL_STORAGE_KEY) || "")}" />
+      `;
     }
 
     form.innerHTML = `
       <label>📅 Data</label>
       <input type="date" id="f-data" value="${today}" required />
 
-      ${this.bloco !== "Compra" ? `<label>👤 Meeiro</label><div id="f-meeiro-combo"></div>` : ""}
+      ${this.bloco !== "Compra" && this.bloco !== "Financeiro" ? `<label>👤 Meeiro</label><div id="f-meeiro-combo"></div>` : ""}
 
-      ${this.bloco !== "Compra" ? `<label>🌿 Estufa</label><div id="f-estufa-combo"></div>` : ""}
+      ${this.bloco !== "Compra" && this.bloco !== "Financeiro" ? `<label>🌿 Estufa</label><div id="f-estufa-combo"></div>` : ""}
 
-      <label>🧴 Produto</label>
-      <div id="f-produto-combo"></div>
-      ${this.bloco === "Uso" || this.bloco === "Ferti" ? `<div id="produto-saldo-info" class="produto-saldo-info"></div>` : ""}
+      ${
+        this.bloco === "Financeiro"
+          ? `<label>🧴 Produto</label><input type="text" id="f-produto-texto" placeholder="Descreva o produto/serviço" required />`
+          : `<label>🧴 Produto</label>
+             <div id="f-produto-combo"></div>
+             ${this.bloco === "Uso" || this.bloco === "Ferti" ? `<div id="produto-saldo-info" class="produto-saldo-info"></div>` : ""}`
+      }
 
       ${camposEspecificos}
 
@@ -216,7 +242,10 @@ const ScreenApontamentoLivre = {
       return ultimoValorPorProduto;
     };
 
-    const produtoCombo = criarComboBusca(form.querySelector("#f-produto-combo"), produtoOpcoes, {
+    // No Financeiro, Produto é um <input type="text"> comum (texto livre) —
+    // não existe combobox nesse bloco, então nem tenta criar um.
+    const produtoCombo = form.querySelector("#f-produto-combo")
+      ? criarComboBusca(form.querySelector("#f-produto-combo"), produtoOpcoes, {
       placeholder: "Buscar produto...",
       onChange:
         produtoSaldoInfo || compraUltimoValorEl || usoDosagemCadastradaEl
@@ -246,7 +275,8 @@ const ScreenApontamentoLivre = {
               }
             }
           : undefined,
-    });
+        })
+      : null;
 
     let meeiroCombo = null;
     let estufaCombo = null;
@@ -332,8 +362,9 @@ const ScreenApontamentoLivre = {
     };
     const atualizarTotalVenda = () => atualizarTotalCalc("venda-total-calc", "Total da venda");
     const atualizarTotalCompra = () => atualizarTotalCalc("compra-total-calc", "Total da compra");
+    const atualizarTotalFinanceiro = () => atualizarTotalCalc("financeiro-total-calc", "Total da compra");
 
-    if (this.bloco !== "Compra") {
+    if (this.bloco !== "Compra" && this.bloco !== "Financeiro") {
       meeiroCombo = criarComboBusca(form.querySelector("#f-meeiro-combo"), meeiroOpcoes, {
         placeholder: "Buscar meeiro...",
         valorInicial: meeiroCod,
@@ -355,6 +386,8 @@ const ScreenApontamentoLivre = {
             : undefined,
       });
     } else {
+      // Compra e Financeiro são os dois blocos sem Meeiro/Estufa — ambos usam
+      // Fornecedor em vez disso.
       fornecedorCombo = criarComboBusca(form.querySelector("#f-fornecedor-combo"), fornecedorOpcoes, {
         placeholder: "Buscar fornecedor...",
         valorInicial: localStorage.getItem(FORNECEDOR_STORAGE_KEY),
@@ -369,8 +402,9 @@ const ScreenApontamentoLivre = {
       });
     }
 
-    if (this.bloco === "Venda" || this.bloco === "Compra") {
-      const atualizarTotal = this.bloco === "Venda" ? atualizarTotalVenda : atualizarTotalCompra;
+    if (this.bloco === "Venda" || this.bloco === "Compra" || this.bloco === "Financeiro") {
+      const atualizarTotal =
+        this.bloco === "Venda" ? atualizarTotalVenda : this.bloco === "Financeiro" ? atualizarTotalFinanceiro : atualizarTotalCompra;
       form.querySelector("#f-quantidade").addEventListener("input", atualizarTotal);
       form.querySelector("#f-valor-unitario").addEventListener("input", atualizarTotal);
     }
@@ -380,7 +414,7 @@ const ScreenApontamentoLivre = {
       const bloco = this.bloco;
       const fields = { Bloco: bloco, Data: form.querySelector("#f-data").value };
 
-      if (bloco !== "Compra") {
+      if (bloco !== "Compra" && bloco !== "Financeiro") {
         // A caixa de busca sempre devolve texto — convertemos para o mesmo tipo
         // do "Codigo" original da planilha (normalmente número) antes de gravar,
         // pra não escrever "3" (texto) numa coluna que a planilha trata como número.
@@ -397,9 +431,14 @@ const ScreenApontamentoLivre = {
           localStorage.setItem(ESTUFA_STORAGE_KEY, fields["Código Estufa"]);
         }
       }
-      fields["Produto"] = produtoCombo.getValue();
+      // Financeiro: Produto é texto livre (input comum), não vem do combobox.
+      fields["Produto"] = bloco === "Financeiro" ? form.querySelector("#f-produto-texto").value.trim() : produtoCombo.getValue();
       if (!fields["Produto"]) {
-        showToast("Não foi possível enviar: selecione um produto da lista.");
+        showToast(
+          bloco === "Financeiro"
+            ? "Não foi possível enviar: descreva o produto/serviço."
+            : "Não foi possível enviar: selecione um produto da lista."
+        );
         return;
       }
       fields["Complemento"] = form.querySelector("#f-complemento").value;
@@ -432,6 +471,18 @@ const ScreenApontamentoLivre = {
         fields["Cliente"] = form.querySelector("#f-cliente").value;
       } else if (bloco === "Compra") {
         fields["Operação"] = "Entrada de fornecedor";
+        fields["Quantidade"] = Number(form.querySelector("#f-quantidade").value);
+        fields["Valor Unitário"] = Number(form.querySelector("#f-valor-unitario").value);
+        fields["Fornecedor"] = fornecedorCombo.getValue();
+        const venc = form.querySelector("#f-vencimento").value;
+        fields["Data Vencimento"] = venc || null;
+        fields["Nota Fiscal"] = form.querySelector("#f-nota-fiscal").value || null;
+        if (fields["Fornecedor"]) localStorage.setItem(FORNECEDOR_STORAGE_KEY, fields["Fornecedor"]);
+        if (fields["Nota Fiscal"]) localStorage.setItem(NOTA_FISCAL_STORAGE_KEY, fields["Nota Fiscal"]);
+      } else if (bloco === "Financeiro") {
+        // Sem "Operação" — a aba Financeiro não tem essa coluna, e sem
+        // Código Estufa/Meeiro — essa conta nunca toca o Registro de
+        // Inventario (ver prepararRegistro em js/apontamento.js).
         fields["Quantidade"] = Number(form.querySelector("#f-quantidade").value);
         fields["Valor Unitário"] = Number(form.querySelector("#f-valor-unitario").value);
         fields["Fornecedor"] = fornecedorCombo.getValue();
