@@ -420,13 +420,16 @@ function prepararRegistro(fields, lookups, seq, usuario) {
   } else if (bloco === "Financeiro") {
     // Conta a pagar SEM estoque por trás (ex.: serviço, despesa avulsa) — só
     // grava na aba Financeiro. NÃO grava no Registro de Inventario (por isso
-    // `inventario` é zerado logo abaixo) nem usa "Seq Inventario" pra ligar
-    // os dois (não existe o outro lado pra ligar).
+    // `inventario` é zerado logo abaixo). Não existe um "Seq" numérico real
+    // pra ligar (não há linha correspondente no Inventario), mas por decisão
+    // do usuário a coluna não fica em branco: grava o texto fixo "FIN" pra
+    // deixar visualmente claro, na planilha, que é um lançamento só de
+    // Financeiro (sem estoque envolvido).
     inventario = null;
     const quantidade = Number(fields["Quantidade"]) || 0;
     const valorUnitario = Number(fields["Valor Unitário"]) || 0;
     financeiro = {
-      "Seq Inventario": null,
+      "Seq Inventario": "FIN",
       "Data Compra": toExcelSerial(fields["Data"]),
       "Data Vencimento": fields["Data Vencimento"] ? toExcelSerial(fields["Data Vencimento"]) : null,
       "Fornecedor": fields["Fornecedor"],
