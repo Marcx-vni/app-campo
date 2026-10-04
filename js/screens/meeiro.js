@@ -405,11 +405,13 @@ async function gerarReciboMeeiroPdf(dados) {
   const contentW = pageW - margin * 2; // 180mm
   const bottomLimit = 282; // deixa ~15mm de margem inferior na folha A4 (297mm)
 
-  // Cores (mesma paleta do app, em RGB).
+  // Cores (mesma paleta do app, em RGB). COR_RODAPE existiu até a v16 — foi
+  // removida junto com o último uso dela (não sobrou nenhum texto cinza no
+  // recibo de propósito "rodapé/legenda"; só o Funrural=0 continua em
+  // COR_MUTED, de propósito, pra diferenciar visualmente da linha).
   const COR_VERDE = [31, 61, 43];
   const COR_TEXTO = [26, 26, 26];
   const COR_MUTED = [107, 107, 101];
-  const COR_RODAPE = [138, 136, 127];
   const COR_BORDA = [222, 220, 210];
   const COR_ZEBRA = [250, 249, 246];
   const COR_VERMELHO = [179, 38, 30];
@@ -579,8 +581,27 @@ async function gerarReciboMeeiroPdf(dados) {
   tracejada(y - 3);
   y += 5;
 
-  // --- Destaque — valor a pagar ---------------------------------------------
-  garantirEspaco(24);
+  // --- Destaque + declaração + assinatura ------------------------------------
+  // Esses 4 pedaços (caixa do valor, texto de referência, nº de vendas/data,
+  // assinatura) sempre andam juntos — formam um bloco de fechamento só, não 4
+  // pedaços independentes. Por isso a altura de TODOS é somada e checada de
+  // uma vez só, ANTES de desenhar qualquer um deles: ou o bloco inteiro cabe
+  // no resto da página 1, ou o bloco inteiro vai pra página 2. Antes (até a
+  // v16) cada pedaço tinha seu próprio `garantirEspaco()`, então em alguns
+  // casos só a ASSINATURA sozinha (o pedaço mais curto) acabava sobrando pra
+  // página 2 — o resto do bloco cabia por pouco, mas ela não. Corrigido em
+  // 04/10/2026 a pedido do usuário ("só se os lançamentos ultrapassarem
+  // imprime 2 páginas").
+  const declaracao = doc.setFont("helvetica", "italic").setFontSize(9).splitTextToSize(
+    "Referente ao pagamento pela venda de produtos hortifrutigranjeiros pelo(a) meeiro(a) acima, conforme contrato de parceria agrícola (meação), no período indicado.",
+    contentW
+  );
+  const alturaValor = 26;
+  const alturaDeclaracao = declaracao.length * 4.5 + 4;
+  const alturaVendasInfo = 12;
+  const alturaAssinatura = 18;
+  garantirEspaco(alturaValor + alturaDeclaracao + alturaVendasInfo + alturaAssinatura);
+
   doc.setFillColor(...COR_VERDE);
   doc.roundedRect(margin, y, contentW, 18, 3, 3, "F");
   doc.setFont("helvetica", "bold");
@@ -591,22 +612,18 @@ async function gerarReciboMeeiroPdf(dados) {
   doc.setFontSize(15);
   doc.setTextColor(255, 255, 255);
   doc.text(formatMoeda(dados.valorMeeiro), margin + 6, y + 14.5);
-  y += 26;
+  y += alturaValor;
 
   // --- Texto de referência do pagamento --------------------------------------
-  const declaracao = doc.setFont("helvetica", "italic").setFontSize(9).splitTextToSize(
-    "Referente ao pagamento pela venda de produtos hortifrutigranjeiros pelo(a) meeiro(a) acima, conforme contrato de parceria agrícola (meação), no período indicado.",
-    contentW
-  );
-  garantirEspaco(declaracao.length * 4.5 + 10);
-  doc.setTextColor(...COR_MUTED);
+  doc.setFont("helvetica", "italic").setFontSize(9);
+  doc.setTextColor(...COR_TEXTO);
   doc.text(declaracao, margin, y);
-  y += declaracao.length * 4.5 + 4;
+  y += alturaDeclaracao;
 
   // Nº de vendas + data de geração.
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  doc.setTextColor(...COR_RODAPE);
+  doc.setTextColor(...COR_TEXTO);
   doc.text(
     `${dados.qtdeVendas} venda${dados.qtdeVendas === 1 ? "" : "s"} no período · Gerado em ${formatDataISOparaBR(
       new Date().toISOString().slice(0, 10)
@@ -614,10 +631,9 @@ async function gerarReciboMeeiroPdf(dados) {
     margin,
     y
   );
-  y += 12;
+  y += alturaVendasInfo;
 
   // --- Assinatura — só a do meeiro --------------------------------------------
-  garantirEspaco(22);
   const largAssinatura = Math.min(90, contentW);
   doc.setDrawColor(200, 199, 188);
   doc.line(margin, y, margin + largAssinatura, y);
@@ -629,7 +645,7 @@ async function gerarReciboMeeiroPdf(dados) {
   y += 4.5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.setTextColor(...COR_RODAPE);
+  doc.setTextColor(...COR_TEXTO);
   doc.text("Assinatura do meeiro", margin, y);
 
   return doc.output("blob");
