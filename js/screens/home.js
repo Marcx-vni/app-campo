@@ -210,8 +210,12 @@ const ScreenHome = {
         valorEstoqueEl.textContent = "—";
       }
 
+      // Antes limitava a só as 4 mais recentes (`comData.slice(0, 4)`) — não
+      // era um limite da planilha/Graph, era um corte fixo só desse trecho.
+      // A pedido do usuário, agora mostra TODAS as linhas com "Gravado em"
+      // (mesma lista `comData`, já ordenada da mais nova pra mais antiga).
       const atividadeList = container.querySelector("#atividade-recente-list");
-      const recentes = comData.slice(0, 4);
+      const recentes = comData;
       if (recentes.length === 0) {
         atividadeList.innerHTML = `<div class="empty-state">Nenhum apontamento lançado ainda.</div>`;
         return;

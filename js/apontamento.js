@@ -129,28 +129,42 @@ function numeroDoSetor(texto) {
 // esse filtro o app misturava os setores de um meeiro com os do outro (bug
 // reportado em 21/09/2026: selecionar José Henrique numa estufa que também
 // tem Rodrigo trazia os setores do Rodrigo).
+// Soma as "Plantas" de todas as linhas que casarem (Estufa+Plantio+Meeiro+Setor)
+// — igual ao SOMASES da planilha (=SOMASES(Setores[Plantas];Setores[Meeiro];...;
+// Setores[Setor];...;Setores[Estufa];...;Setores[Plantio];...)), que soma
+// mais de uma linha se por acaso existir duplicidade cadastrada pro mesmo
+// setor/meeiro/estufa/plantio. Antes (até a v14) cada linha virava uma
+// entrada própria e, em caso de duplicidade, a última sobrescrevia a
+// anterior em vez de somar — diferença encontrada comparando com a fórmula
+// real da planilha em 04/10/2026.
 function setoresDoPlantioAtivo(lookups, estufaNome, meeiroNome) {
   const plantioAtivo = plantiosAtivos(lookups, estufaNome)[0];
   if (!plantioAtivo) return [];
-  return (lookups.setoresFerti || [])
+  const porSetor = new Map();
+  (lookups.setoresFerti || [])
     .filter(
       (s) =>
         s["Estufa"] === estufaNome &&
         s["Plantio"] === plantioAtivo &&
         (!meeiroNome || s["Meeiro"] === meeiroNome)
     )
-    .map((s) => ({ setor: numeroDoSetor(s["Setor"]), plantas: Number(s["Plantas"]) || 0 }))
-    .filter((s) => s.setor && s.setor >= 1 && s.setor <= 6)
-    .sort((a, b) => a.setor - b.setor);
+    .forEach((s) => {
+      const setor = numeroDoSetor(s["Setor"]);
+      if (!setor || setor < 1 || setor > 6) return;
+      porSetor.set(setor, (porSetor.get(setor) || 0) + (Number(s["Plantas"]) || 0));
+    });
+  return Array.from(porSetor, ([setor, plantas]) => ({ setor, plantas })).sort((a, b) => a.setor - b.setor);
 }
 
-// Arredonda pro múltiplo de 50 gramas mais próximo (ex.: 624 -> 600,
-// 625 -> 650, 674 -> 650, 675 -> 700) — a pedido do usuário: balança de campo
-// não pesa de grama em grama, e um múltiplo de 50 facilita a leitura tanto
-// no card quanto no relatório do WhatsApp. Usado em todo lugar que mostra ou
-// grava quantidade de Ferti.
+// Arredonda SEMPRE PARA CIMA, pro múltiplo de 10 gramas mais próximo — mesma
+// regra da fórmula da planilha (`ARREDONDAR.PARA.CIMA(...;-1)`, aba de
+// cálculo de Fertirrigação). Ex.: 624 -> 630, 625 -> 630, 630 -> 630,
+// 631 -> 640. Antes (até a v14) o app arredondava pro múltiplo de 50 mais
+// PRÓXIMO (podendo arredondar pra baixo) — diferente da planilha; corrigido
+// em 04/10/2026 a pedido do usuário pra ficar idêntico à planilha. Usado em
+// todo lugar que mostra ou grava quantidade de Ferti.
 function arredondarGramasFerti(valor) {
-  return Math.round((Number(valor) || 0) / 50) * 50;
+  return Math.ceil((Number(valor) || 0) / 10) * 10;
 }
 
 // Quanto de produto cada setor recebe numa Fertirrigação: plantas do setor ÷
