@@ -111,6 +111,14 @@ const ScreenHome = {
           <div class="resumo-valor resumo-valor-pequeno" id="resumo-valor-estoque">—</div>
           <div class="resumo-label">Valor em estoque</div>
         </div>
+        <div class="resumo-card">
+          <div class="resumo-valor resumo-valor-pequeno resumo-alerta" id="resumo-vence-7">—</div>
+          <div class="resumo-label">Vence em 7 dias</div>
+        </div>
+        <div class="resumo-card">
+          <div class="resumo-valor resumo-valor-pequeno" id="resumo-receber-mes">—</div>
+          <div class="resumo-label" id="resumo-receber-mes-label">Receber mês</div>
+        </div>
       </div>
 
       <div class="section-title" style="margin-top:18px;">Previsão do tempo</div>
@@ -130,17 +138,13 @@ const ScreenHome = {
         </div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;margin-bottom:10px;">
-        <div class="section-title" style="margin:0;">Atividade recente</div>
-        <div id="atividade-ver-tudo" style="font-size:12px;color:var(--verde);font-weight:500;cursor:pointer;">Ver tudo</div>
-      </div>
+      <div class="section-title" style="margin-top:22px;margin-bottom:10px;">Atividade recente</div>
       <div id="atividade-recente-list"></div>
     `;
 
     container.querySelectorAll(".acao-rapida").forEach((el) => {
       el.addEventListener("click", () => navigate(el.dataset.route));
     });
-    container.querySelector("#atividade-ver-tudo").addEventListener("click", () => navigate("fila"));
 
     carregarPrevisaoHome(container); // não bloqueia a tela — se falhar, fica só sem o card
 
@@ -172,10 +176,12 @@ const ScreenHome = {
 
       let registro = [];
       let registroFerti = [];
+      let financeiro = [];
       try {
-        [registro, registroFerti] = await Promise.all([
+        [registro, registroFerti, financeiro] = await Promise.all([
           readTable(TABLES.registroInventario),
           readTable(TABLES.registroFerti).catch(() => []),
+          readTable(TABLES.financeiro).catch(() => []),
         ]);
       } catch (e) {
         console.warn("Falha ao buscar Registro de Inventario pra Atividade recente:", e);
@@ -210,12 +216,60 @@ const ScreenHome = {
         valorEstoqueEl.textContent = "—";
       }
 
-      // Antes limitava a só as 4 mais recentes (`comData.slice(0, 4)`) — não
-      // era um limite da planilha/Graph, era um corte fixo só desse trecho.
-      // A pedido do usuário, agora mostra TODAS as linhas com "Gravado em"
-      // (mesma lista `comData`, já ordenada da mais nova pra mais antiga).
+      // Card "Vence em 7 dias" — mesma lógica/fórmula do KPI equivalente na
+      // tela Financeiro (`financeiro.js`): título não pago, não vencido, e
+      // que vence em até 7 dias a partir de hoje.
+      const situacaoFinanceiro = (r) => {
+        if (r["Status"] === "Pago") return "pago";
+        const venc = r["Data Vencimento"];
+        if (venc !== undefined && venc !== null && venc !== "" && Number(venc) < hojeSerial) return "vencida";
+        return "aberto";
+      };
+      const diasParaVencerFinanceiro = (r) => Number(r["Data Vencimento"]) - hojeSerial;
+      const titulosAbertos = (financeiro || [])
+        .filter((r) => r["Fornecedor"] || r["Produto"])
+        .filter((r) => situacaoFinanceiro(r) !== "pago");
+      const totalVence7 = titulosAbertos
+        .filter((r) => situacaoFinanceiro(r) === "aberto" && diasParaVencerFinanceiro(r) <= 7)
+        .reduce((s, r) => s + (Number(r["Valor Total"]) || 0), 0);
+      container.querySelector("#resumo-vence-7").textContent = formatMoeda(totalVence7);
+
+      // Card "Receber mês" — total a receber de TODOS os meeiros somados, no
+      // mês calendário da venda mais recente lançada (não necessariamente o
+      // mês corrente — reflete sempre o último período com venda lançada),
+      // usando o mesmo "Total Líquido" (já com embalagem e FUNRURAL
+      // descontados linha a linha) calculado na tela Meeiro, × 70% — decisão
+      // confirmada com o usuário em 04/10/2026.
+      const vendasMeeiro = registro.filter((r) => r["Tipo Movimentação"] === "V" && r["Data"]);
+      let totalReceberMes = 0;
+      let mesReceberLabel = "—";
+      if (vendasMeeiro.length > 0) {
+        const excelEpocaMs = Date.UTC(1899, 11, 30);
+        const serialMax = vendasMeeiro.reduce((max, r) => Math.max(max, Number(r["Data"]) || 0), 0);
+        const dataRef = new Date(excelEpocaMs + serialMax * 86400000);
+        const anoRef = dataRef.getUTCFullYear();
+        const mesRef = dataRef.getUTCMonth();
+        const vendasDoMes = vendasMeeiro.filter((r) => {
+          const d = new Date(excelEpocaMs + Number(r["Data"]) * 86400000);
+          return d.getUTCFullYear() === anoRef && d.getUTCMonth() === mesRef;
+        });
+        totalReceberMes = vendasDoMes.reduce((s, r) => s + meeiroTotalComFunrural(r), 0) * 0.7;
+        mesReceberLabel = String(mesRef + 1).padStart(2, "0");
+      }
+      container.querySelector("#resumo-receber-mes").textContent = formatMoeda(totalReceberMes);
+      container.querySelector("#resumo-receber-mes-label").textContent = `Receber mês · ${mesReceberLabel}`;
+
+      // Atividade recente: só do ÚLTIMO DIA com lançamento (não necessariamente
+      // hoje, se ainda não foi lançado nada hoje) — antes trazia TODO o
+      // histórico (até a v15) ou um corte fixo de 4 itens (antes da v15);
+      // a pedido do usuário, volta a ser limitado, mas por dia (não por
+      // quantidade fixa de itens).
       const atividadeList = container.querySelector("#atividade-recente-list");
-      const recentes = comData;
+      const ultimoDiaSerial = comData.length > 0 ? Math.floor(Number(comData[0]["Gravado em"])) : null;
+      const recentes =
+        ultimoDiaSerial !== null
+          ? comData.filter((r) => Math.floor(Number(r["Gravado em"])) === ultimoDiaSerial)
+          : [];
       if (recentes.length === 0) {
         atividadeList.innerHTML = `<div class="empty-state">Nenhum apontamento lançado ainda.</div>`;
         return;

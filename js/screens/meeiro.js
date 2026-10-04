@@ -426,7 +426,7 @@ async function gerarReciboMeeiroPdf(dados) {
     y = margin;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.setTextColor(...COR_RODAPE);
+    doc.setTextColor(...COR_TEXTO);
     doc.text(`Recibo de Pagamento — continuação (pág. ${pagina})`, margin, y);
     y += 8;
   };
@@ -457,7 +457,7 @@ async function gerarReciboMeeiroPdf(dados) {
   y += 6;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(...COR_MUTED);
+  doc.setTextColor(...COR_TEXTO);
   doc.text(`Período: ${periodoTexto}`, margin, y);
   y += 10;
 
@@ -483,7 +483,7 @@ async function gerarReciboMeeiroPdf(dados) {
   const desenharCabecalhoTabela = () => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.8);
-    doc.setTextColor(...COR_RODAPE);
+    doc.setTextColor(...COR_TEXTO);
     doc.text("Data", cx(colData), y);
     doc.text("Cliente", cx(colCliente), y);
     doc.text("Produto", cx(colProduto), y);
@@ -502,7 +502,7 @@ async function gerarReciboMeeiroPdf(dados) {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.setTextColor(...COR_MUTED);
+  doc.setTextColor(...COR_TEXTO);
   doc.text(
     `EXTRATO DAS VENDAS · ${linhasExtrato.length} LANÇAMENTO${linhasExtrato.length === 1 ? "" : "S"}`,
     margin,
@@ -550,7 +550,7 @@ async function gerarReciboMeeiroPdf(dados) {
   garantirEspaco(60);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.setTextColor(...COR_MUTED);
+  doc.setTextColor(...COR_TEXTO);
   doc.text("APURAÇÃO", margin, y);
   y += 7;
 
