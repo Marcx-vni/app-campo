@@ -443,13 +443,18 @@ async function gerarReciboMeeiroPdf(dados) {
   };
 
   // --- Cabeçalho (só na 1ª página) ---------------------------------------
+  // Faixa reduzida de 20mm pra 14mm (e a caixa "Valor a pagar" mais abaixo,
+  // de 18mm pra 13mm) a pedido do usuário em 04/10/2026, pra sobrar espaço
+  // suficiente e caber tudo numa página só em mais casos (recibos com mais
+  // vendas no extrato ainda podem gerar 2ª página — essa é só a parte do
+  // espaço que dava pra economizar sem cortar conteúdo).
   doc.setFillColor(...COR_VERDE);
-  doc.rect(0, 0, pageW, 20, "F");
+  doc.rect(0, 0, pageW, 14, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("Recibo de Pagamento", margin, 13);
-  y = 30;
+  doc.setFontSize(13);
+  doc.text("Recibo de Pagamento", margin, 9.5);
+  y = 22;
 
   // Meeiro + período.
   doc.setTextColor(...COR_TEXTO);
@@ -596,22 +601,22 @@ async function gerarReciboMeeiroPdf(dados) {
     "Referente ao pagamento pela venda de produtos hortifrutigranjeiros pelo(a) meeiro(a) acima, conforme contrato de parceria agrícola (meação), no período indicado.",
     contentW
   );
-  const alturaValor = 26;
+  const alturaValor = 19;
   const alturaDeclaracao = declaracao.length * 4.5 + 4;
   const alturaVendasInfo = 12;
   const alturaAssinatura = 18;
   garantirEspaco(alturaValor + alturaDeclaracao + alturaVendasInfo + alturaAssinatura);
 
   doc.setFillColor(...COR_VERDE);
-  doc.roundedRect(margin, y, contentW, 18, 3, 3, "F");
+  doc.roundedRect(margin, y, contentW, 13, 3, 3, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
+  doc.setFontSize(7.5);
   doc.setTextColor(230, 236, 232);
-  doc.text("VALOR A PAGAR AO MEEIRO", margin + 6, y + 7);
+  doc.text("VALOR A PAGAR AO MEEIRO", margin + 6, y + 5.5);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
+  doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
-  doc.text(formatMoeda(dados.valorMeeiro), margin + 6, y + 14.5);
+  doc.text(formatMoeda(dados.valorMeeiro), margin + 6, y + 10.8);
   y += alturaValor;
 
   // --- Texto de referência do pagamento --------------------------------------
