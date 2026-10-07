@@ -215,11 +215,15 @@ const ScreenApontamentoLivre = {
     const compraUltimoValorEl = form.querySelector("#compra-ultimo-valor");
     const usoDosagemCadastradaEl = form.querySelector("#uso-dosagem-cadastrada");
 
-    // Último valor pago pelo produto (aba "Registro de Inventario", só
-    // entradas de fornecedor) — carregado sob demanda na primeira vez que a
-    // pessoa escolhe um produto na Compra, e reaproveitado depois (a tabela
-    // pode ser grande, então evita reler a cada troca de produto). Guarda só
-    // o valor mais recente por produto, usando "Gravado em" pra desempate.
+    // Dados da ÚLTIMA compra de cada produto (aba "Registro de Inventario",
+    // só entradas de fornecedor) — carregado sob demanda na primeira vez que
+    // a pessoa escolhe um produto na Compra, e reaproveitado depois (a
+    // tabela pode ser grande, então evita reler a cada troca de produto).
+    // Guarda só a entrada mais recente por produto, usando "Gravado em" pra
+    // desempate. Desde a v19 guarda também Quantidade/Data da compra (não
+    // "Gravado em", que é o instante que o app gravou — "Data" é a data da
+    // compra em si, que a pessoa pode ter digitado diferente) e Fornecedor,
+    // além do Valor Entrada — antes só guardava o valor.
     let ultimoValorPorProduto = null;
     const carregarUltimoValorPorProduto = async () => {
       if (ultimoValorPorProduto) return ultimoValorPorProduto;
@@ -233,7 +237,13 @@ const ScreenApontamentoLivre = {
           const gravado = Number(r["Gravado em"]) || 0;
           const atual = ultimoValorPorProduto[produto];
           if (!atual || gravado >= atual.gravado) {
-            ultimoValorPorProduto[produto] = { valor: Number(r["Valor Entrada"]) || 0, gravado };
+            ultimoValorPorProduto[produto] = {
+              valor: Number(r["Valor Entrada"]) || 0,
+              quantidade: Number(r["Qtde."]) || 0,
+              data: r["Data"] || null,
+              fornecedor: r["Fornecedor"] || null,
+              gravado,
+            };
           }
         });
       } catch (e) {
@@ -262,16 +272,21 @@ const ScreenApontamentoLivre = {
               }
               if (compraUltimoValorEl) {
                 if (!opcao) {
-                  compraUltimoValorEl.textContent = "";
+                  compraUltimoValorEl.innerHTML = "";
                   return;
                 }
-                compraUltimoValorEl.textContent = "Verificando último valor comprado...";
+                compraUltimoValorEl.innerHTML = "Verificando última compra...";
                 const mapa = await carregarUltimoValorPorProduto();
                 const info = mapa[opcao.value];
-                compraUltimoValorEl.textContent =
-                  info && info.valor > 0
-                    ? `💲 Último valor comprado: ${formatMoeda(info.valor)}`
-                    : "Nenhuma compra anterior encontrada pra esse produto.";
+                if (!info || !(info.valor > 0)) {
+                  compraUltimoValorEl.innerHTML = "Nenhuma compra anterior encontrada pra esse produto.";
+                } else {
+                  const linhas = [`💲 Último valor comprado: ${formatMoeda(info.valor)}`];
+                  if (info.quantidade > 0) linhas.push(`⚖️ Última quantidade comprada: ${formatNumero(info.quantidade)}`);
+                  if (info.data) linhas.push(`📅 Última data de compra: ${formatExcelDate(info.data)}`);
+                  if (info.fornecedor) linhas.push(`🏭 Fornecedor: ${escapeHtml(String(info.fornecedor))}`);
+                  compraUltimoValorEl.innerHTML = linhas.map((l) => `<div>${l}</div>`).join("");
+                }
               }
             }
           : undefined,
