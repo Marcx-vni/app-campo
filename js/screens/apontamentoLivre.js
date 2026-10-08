@@ -426,6 +426,17 @@ const ScreenApontamentoLivre = {
 
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
+
+      // Trava contra duplo-toque (v20): o botão é desabilitado no instante
+      // do toque, antes de qualquer "await" — é essa janela entre o toque e
+      // a troca do <form> (no final do handler) que permitia um segundo
+      // toque rápido disparar o mesmo envio de novo e duplicar o
+      // apontamento na planilha. Reabilitado nos retornos antecipados
+      // (erro de validação) porque nesses casos o form continua na tela.
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn && submitBtn.disabled) return;
+      if (submitBtn) submitBtn.disabled = true;
+
       const bloco = this.bloco;
       const fields = { Bloco: bloco, Data: form.querySelector("#f-data").value };
 
@@ -454,6 +465,7 @@ const ScreenApontamentoLivre = {
             ? "Não foi possível enviar: descreva o produto/serviço."
             : "Não foi possível enviar: selecione um produto da lista."
         );
+        if (submitBtn) submitBtn.disabled = false;
         return;
       }
       fields["Complemento"] = form.querySelector("#f-complemento").value;
@@ -511,6 +523,7 @@ const ScreenApontamentoLivre = {
       const erro = validateBeforeSend(fields, lookups);
       if (erro) {
         showToast(`Não foi possível enviar: ${erro}`);
+        if (submitBtn) submitBtn.disabled = false;
         return;
       }
 

@@ -110,6 +110,31 @@ async function queueAdd(apontamento) {
     apontamento.fields["Usuario"] =
       typeof getUserEmailPrefix === "function" ? getUserEmailPrefix() : null;
   }
+
+  // Trava de segurança contra duplo-toque/duplo-clique (v20): a defesa
+  // principal é desabilitar o botão de envio assim que o toque acontece (ver
+  // apontamentoLivre.js e ordemCard.js) — isso aqui é uma SEGUNDA camada, pro
+  // caso o duplo-toque escape por outro caminho (ex.: tecla Enter disparando
+  // o submit duas vezes antes do botão ser desabilitado). Se já existe, na
+  // fila, um item com exatamente os MESMOS campos, criado há poucos segundos
+  // e que não falhou, devolve esse item em vez de criar um novo — evita
+  // gravar duas vezes a mesma planilha. Único efeito colateral conhecido: se
+  // a pessoa de campo realmente lançar de propósito dois apontamentos
+  // idênticos (mesmo produto/quantidade/estufa/etc.) em menos de 15s, o
+  // segundo toque não cria uma segunda linha — precisa esperar esse intervalo
+  // ou mudar algo no formulário (ex.: o complemento).
+  if (apontamento.fields && !apontamento.localOnly) {
+    const assinatura = JSON.stringify(apontamento.fields);
+    const agora = Date.now();
+    const existentes = await queueAll();
+    const duplicado = existentes.find((i) => {
+      if (i.localOnly || i.status === "erro") return false;
+      if (JSON.stringify(i.fields) !== assinatura) return false;
+      return agora - new Date(i.createdAt).getTime() < 15000;
+    });
+    if (duplicado) return duplicado;
+  }
+
   const item = {
     localId: generateLocalId(),
     status: "pendente",

@@ -93,7 +93,15 @@ const ScreenOrdemCard = {
       showToast("Rascunho salvo neste aparelho");
     });
 
-    el.querySelector("#btn-confirmar").addEventListener("click", async () => {
+    el.querySelector("#btn-confirmar").addEventListener("click", async (ev) => {
+      // Trava contra duplo-toque (v20): mesmo problema e mesma solução do
+      // Apontamento Livre — desabilita o botão assim que o toque acontece,
+      // antes de qualquer "await", pra um segundo toque rápido não disparar
+      // o mesmo envio de novo e duplicar o apontamento na planilha.
+      const btnConfirmar = ev.currentTarget;
+      if (btnConfirmar.disabled) return;
+      btnConfirmar.disabled = true;
+
       const form = readForm();
       const fields = isFerti
         ? {
@@ -129,6 +137,7 @@ const ScreenOrdemCard = {
       const erro = validateBeforeSend(fields, lookups);
       if (erro) {
         showToast(`Não foi possível enviar: ${erro}`);
+        btnConfirmar.disabled = false;
         return;
       }
 
