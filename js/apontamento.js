@@ -37,6 +37,17 @@ const FINANCEIRO_COLUMNS = [
 ];
 const FINANCEIRO_COMPUTED = new Set(["Data Pagamento", "Valor Pago", "Dias em Atraso"]);
 
+// Aba "Pulverização", tabela "Pulverizacao" — tabela independente, sem vínculo
+// com Registro de Inventario/estoque (confirmado pelo usuário: "esse
+// lançamento é apenas para gerar um card e enviar para os meeiros"). Colunas
+// confirmadas em 10/10/2026 (print da planilha), nessa ordem exata. "Estufa"
+// e "Meeiro" guardam os NOMES escolhidos (pode ser mais de um), juntados com
+// "/" — ex.: "ESTUFA BAIXA/ESTUFA 1J" — não um código. Uma linha por Produto
+// (o mesmo lançamento, com várias estufas/meeiros/produtos, vira várias
+// linhas repetindo Data/Estufa/Meeiro/Horário e variando só Produto/Dosagem).
+const REGISTRO_PULVERIZACAO_COLUMNS = ["Data", "Estufa", "Meeiro", "Produto", "Dosagem", "Horário"];
+const REGISTRO_PULVERIZACAO_COMPUTED = new Set();
+
 function montarLinha(colunas, computadas, valores) {
   return colunas.map((col) => {
     if (computadas.has(col)) return null;
@@ -80,6 +91,17 @@ function toExcelSerialDateTime(date) {
   return (comoSeFosseUTC - excelEpoch) / 86400000;
 }
 
+// Converte um horário "HH:MM" (valor de <input type="time">) pro formato que
+// o Excel usa pra guardar hora: fração do dia (06:00 -> 0,25). Usado só na
+// coluna "Horário" da Pulverização.
+function toExcelTimeSerial(horaTexto) {
+  const m = String(horaTexto || "").match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const horas = Number(m[1]) || 0;
+  const minutos = Number(m[2]) || 0;
+  return (horas * 60 + minutos) / 1440;
+}
+
 // Campos obrigatórios por bloco (entrada do usuário, antes de qualquer cálculo).
 const REQUIRED_FIELDS = {
   Uso: ["Bloco", "Data", "Código Meeiro", "Código Estufa", "Produto", "Operação", "Quantidade"],
@@ -91,6 +113,10 @@ const REQUIRED_FIELDS = {
   // "Produto" aqui é texto livre (não vem do Cadastro de Produtos) — ver
   // validateBeforeSend/prepararRegistro, que tratam esse bloco à parte.
   Financeiro: ["Bloco", "Data", "Produto", "Quantidade", "Valor Unitário", "Fornecedor"],
+  // Pulverização: não tem Quantidade (não mexe em estoque) — "Estufa"/"Meeiro"
+  // aqui são os NOMES já juntados com "/" (podem ser mais de um), montados na
+  // tela a partir da seleção múltipla, não um código como nos outros blocos.
+  Pulverizacao: ["Bloco", "Data", "Estufa", "Meeiro", "Produto", "Dosagem", "Horário"],
 };
 
 const SETOR_FIELDS = ["Qtde Setor 1", "Qtde Setor 2", "Qtde Setor 3", "Qtde Setor 4", "Qtde Setor 5", "Qtde Setor 6"];
@@ -220,6 +246,8 @@ function validateBeforeSend(fields, lookups) {
   if (bloco === "Ferti") {
     const algumSetor = SETOR_FIELDS.some((f) => Number(fields[f]) > 0);
     if (!algumSetor) return "Informe qtde por setor";
+  } else if (bloco === "Pulverizacao") {
+    if (Number(fields["Dosagem"]) <= 0) return "Dosagem inválida";
   } else {
     if (Number(fields["Quantidade"]) <= 0) return "Quantidade inválida";
   }
@@ -346,6 +374,7 @@ function prepararRegistro(fields, lookups, seq, usuario) {
   let inventario = { ...base };
   let ferti = null;
   let financeiro = null;
+  let pulverizacao = null;
 
   if (bloco === "Uso") {
     const quantidadeLitros = Number(fields["Quantidade"]) || 0;
@@ -457,6 +486,20 @@ function prepararRegistro(fields, lookups, seq, usuario) {
       "Usuario": usuario,
       "Gravado em": toExcelSerialDateTime(agora),
     };
+  } else if (bloco === "Pulverizacao") {
+    // Tabela independente — não grava no Registro de Inventario nem mexe em
+    // estoque (ver comentário na definição de REGISTRO_PULVERIZACAO_COLUMNS).
+    // "Estufa"/"Meeiro" já chegam prontos (nomes juntados com "/") de
+    // apontamentoLivre.js — não passam pelo lookup de código feito acima.
+    inventario = null;
+    pulverizacao = {
+      "Data": toExcelSerial(fields["Data"]),
+      "Estufa": fields["Estufa"],
+      "Meeiro": fields["Meeiro"],
+      "Produto": fields["Produto"],
+      "Dosagem": Number(fields["Dosagem"]) || 0,
+      "Horário": toExcelTimeSerial(fields["Horário"]),
+    };
   }
 
   return {
@@ -464,5 +507,8 @@ function prepararRegistro(fields, lookups, seq, usuario) {
     inventario: inventario ? montarLinha(REGISTRO_INVENTARIO_COLUMNS, REGISTRO_INVENTARIO_COMPUTED, inventario) : null,
     ferti: ferti ? montarLinha(REGISTRO_FERTI_COLUMNS, REGISTRO_FERTI_COMPUTED, ferti) : null,
     financeiro: financeiro ? montarLinha(FINANCEIRO_COLUMNS, FINANCEIRO_COMPUTED, financeiro) : null,
+    pulverizacao: pulverizacao
+      ? montarLinha(REGISTRO_PULVERIZACAO_COLUMNS, REGISTRO_PULVERIZACAO_COMPUTED, pulverizacao)
+      : null,
   };
 }

@@ -1,0 +1,515 @@
+// ============================================================================
+// APLIC. (Pulverização) — aba "Pulverização" / tabela "Pulverizacao".
+// Tela nova (v22), pedida pelo usuário em 10/10/2026: registra lançamentos de
+// pulverização (não mexe em estoque, é só um log pra gerar o card de WhatsApp
+// avisando os meeiros) e gera esse card já agrupado por Estufa(s)/Meeiro(s).
+//
+// Diferente dos outros blocos (Uso/Ferti/Venda/Compra/Financeiro):
+// - Estufa e Meeiro aceitam MAIS DE UM (seleção múltipla, ver combobox.js
+//   `criarMultiComboBusca`) — gravados na planilha como os NOMES juntados com
+//   "/" (ex.: "ESTUFA BAIXA/ESTUFA 1J"), não um código.
+// - Pode lançar VÁRIOS produtos de uma vez (um por linha, cada um com sua
+//   própria dosagem) — cada produto vira uma linha própria na tabela
+//   Pulverizacao, repetindo Data/Estufa/Meeiro/Horário.
+// - "Quantidade de calda" é só uma CONTA MOSTRADA NA TELA pra ajudar a
+//   decidir a dosagem — não existe coluna pra isso na planilha (confirmado
+//   com o usuário, print da tabela real em 10/10/2026). Fórmula confirmada
+//   EXPLICITAMENTE com o usuário (mesmo parecendo estranha dimensionalmente):
+//   Estoque × 1000 × Dosagem — não dividir, foi perguntado e confirmado assim.
+// ============================================================================
+
+// Horário gravado como fração do dia (padrão Excel) -> "HH:MM" pra exibir.
+// Inverso de toExcelTimeSerial (apontamento.js).
+function formatExcelHorario(serial) {
+  if (serial === undefined || serial === null || serial === "") return "—";
+  const totalMin = Math.round(Number(serial) * 1440);
+  const h = Math.floor(totalMin / 60) % 24;
+  const m = totalMin % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// Agrupa as linhas da tabela Pulverizacao em "lançamentos" (mesma Data +
+// Estufa + Meeiro + Horário = um único card, com a lista de produtos dentro)
+// — espelha como a própria planilha é preenchida: um lançamento de várias
+// estufas/meeiros/produtos vira várias linhas repetindo esses 4 campos.
+function agruparPulverizacoes(rows) {
+  const grupos = new Map();
+  rows.forEach((r) => {
+    const key = [r["Data"], r["Estufa"], r["Meeiro"], r["Horário"]].map((v) => String(v ?? "")).join("||");
+    if (!grupos.has(key)) {
+      grupos.set(key, { chave: key, data: r["Data"], estufa: r["Estufa"], meeiro: r["Meeiro"], horario: r["Horário"], produtos: [] });
+    }
+    grupos.get(key).produtos.push({ nome: r["Produto"] || "—", dosagem: Number(r["Dosagem"]) || 0 });
+  });
+  return Array.from(grupos.values()).sort((a, b) => (Number(b.data) || 0) - (Number(a.data) || 0));
+}
+
+// Gera a imagem (PNG) do card de Pulverização pronto pra WhatsApp — mesmo
+// padrão visual dos outros cards do app (gerarCardFertiPng, home.js), com uma
+// faixa de alerta chamativa no rodapé pro horário limite (pedido explícito do
+// usuário: "texto bem chamativo 'PULVERIZAR ANTES DE (Horário)'").
+// dados: { estufasTexto, meeirosTexto, dataTexto, horario, produtos: [{nome, dosagem}] }
+async function gerarCardPulverizacaoPng(dados) {
+  const fonte = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
+  const escala = 2;
+  const colProduto = 230;
+  const colDosagem = 120;
+  const altCabecalho = 40;
+  const altLinhaBase = 42;
+  const altAlerta = 58;
+  const raio = 22;
+  const alturaLinhaTexto = 17;
+  const maxLinhasInfo = 2;
+  const maxLinhasProduto = 2;
+
+  const medCtx = document.createElement("canvas").getContext("2d");
+
+  medCtx.font = `600 20px ${fonte}`;
+  const larguraTitulo = 56 + medCtx.measureText("Pulverização").width + 90; // +90 reserva espaço da data à direita
+  const larguraTabela = colProduto + colDosagem;
+  let largura = Math.max(larguraTabela, larguraTitulo, 320);
+
+  medCtx.font = `13.5px ${fonte}`;
+  const linhasEstufa = quebrarTextoCanvas(medCtx, `🌿 ${dados.estufasTexto || "—"}`, largura - 44, maxLinhasInfo);
+  const linhasMeeiro = quebrarTextoCanvas(medCtx, `🤝 ${dados.meeirosTexto || "—"}`, largura - 44, maxLinhasInfo);
+  const linhasHeaderInfo = [...linhasEstufa, ...linhasMeeiro];
+  const altHeader = 46 + linhasHeaderInfo.length * alturaLinhaTexto + 12;
+
+  medCtx.font = `600 14px ${fonte}`;
+  const larguraProdutoDisponivel = colProduto - 24;
+  const linhasPorProduto = dados.produtos.map((p) => quebrarTextoCanvas(medCtx, p.nome, larguraProdutoDisponivel, maxLinhasProduto));
+  const alturasLinha = linhasPorProduto.map((linhas) => Math.max(altLinhaBase, linhas.length * alturaLinhaTexto + 18));
+  const alturaTabelaLinhas = alturasLinha.reduce((soma, h) => soma + h, 0);
+
+  const altura = altHeader + altCabecalho + alturaTabelaLinhas + altAlerta;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(largura * escala);
+  canvas.height = Math.ceil(altura * escala);
+  const ctx = canvas.getContext("2d");
+  ctx.scale(escala, escala);
+  ctx.textBaseline = "middle";
+
+  const retanguloArredondado = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+
+  ctx.save();
+  retanguloArredondado(0, 0, largura, altura, raio);
+  ctx.clip();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, largura, altura);
+
+  // Cabeçalho verde escuro — título + data (direita) + estufa(s)/meeiro(s).
+  ctx.fillStyle = "#1F3D2B";
+  ctx.fillRect(0, 0, largura, altHeader);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `24px ${fonte}`;
+  ctx.textAlign = "left";
+  ctx.fillText("🚿", 22, 28);
+  ctx.font = `600 20px ${fonte}`;
+  ctx.fillText("Pulverização", 54, 28);
+  ctx.font = `13px ${fonte}`;
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.textAlign = "right";
+  ctx.fillText(dados.dataTexto || "", largura - 22, 28);
+  ctx.textAlign = "left";
+  let yHeaderInfo = 54;
+  linhasHeaderInfo.forEach((linha) => {
+    ctx.fillText(linha, 22, yHeaderInfo);
+    yHeaderInfo += alturaLinhaTexto;
+  });
+
+  // Cabeçalho da tabela.
+  let y = altHeader;
+  ctx.fillStyle = "#F7F6F2";
+  ctx.fillRect(0, y, largura, altCabecalho);
+  ctx.font = `600 13px ${fonte}`;
+  ctx.fillStyle = "#3A3A34";
+  ctx.textAlign = "left";
+  ctx.fillText("Produto", 16, y + altCabecalho / 2);
+  ctx.textAlign = "center";
+  ctx.fillText("Dosagem", colProduto + colDosagem / 2, y + altCabecalho / 2);
+  y += altCabecalho;
+
+  // Uma linha por produto.
+  dados.produtos.forEach((p, idx) => {
+    const altLinha = alturasLinha[idx];
+    const linhasNome = linhasPorProduto[idx];
+    if (idx % 2 === 1) {
+      ctx.fillStyle = "#FAF9F6";
+      ctx.fillRect(0, y, largura, altLinha);
+    }
+    ctx.font = `600 14px ${fonte}`;
+    ctx.fillStyle = "#1A1A1A";
+    ctx.textAlign = "left";
+    const yPrimeiraLinha = y + altLinha / 2 - ((linhasNome.length - 1) * alturaLinhaTexto) / 2;
+    linhasNome.forEach((linha, li) => ctx.fillText(linha, 16, yPrimeiraLinha + li * alturaLinhaTexto));
+    ctx.font = `14px ${fonte}`;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#1A1A1A";
+    ctx.fillText(formatNumero(p.dosagem), colProduto + colDosagem / 2, y + altLinha / 2);
+    y += altLinha;
+  });
+
+  // Faixa de alerta — chamativa de propósito (fundo terracota, texto branco
+  // grande), pedido explícito do usuário pro horário não passar despercebido.
+  ctx.fillStyle = "#C9603D";
+  ctx.fillRect(0, y, largura, altAlerta);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `700 17px ${fonte}`;
+  ctx.textAlign = "center";
+  ctx.fillText(`⚠️ PULVERIZAR ANTES DE ${dados.horario || "—"}`, largura / 2, y + altAlerta / 2);
+
+  ctx.restore();
+
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+}
+
+async function enviarCardPulverizacao(dados) {
+  const blob = await gerarCardPulverizacaoPng(dados);
+  if (!blob) {
+    showToast("Não foi possível gerar a imagem do card.");
+    return;
+  }
+  const nomeArquivo = `pulverizacao-${dados.dataTexto || ""}`.replace(/[^\w-]+/g, "_") + ".png";
+  await compartilharImagem(blob, nomeArquivo);
+}
+
+const ScreenAplic = {
+  async render(container) {
+    container.innerHTML = `
+      <h2 class="page-title">Aplic. (Pulverização)</h2>
+      <p class="page-subtitle">Registre a pulverização e gere o card de aviso pros meeiros</p>
+
+      <label>📅 Data</label>
+      <input type="date" id="pulv-data" value="${new Date().toISOString().slice(0, 10)}" required />
+
+      <label>🌿 Estufa (pode escolher mais de uma)</label>
+      <div id="pulv-estufa-combo"></div>
+
+      <label>🤝 Meeiro (pode escolher mais de um)</label>
+      <div id="pulv-meeiro-combo"></div>
+
+      <div class="section-title">Produtos</div>
+      <div id="pulv-produtos-list"></div>
+      <button type="button" id="pulv-add-produto" class="btn btn-secondary btn-sm">+ Adicionar produto</button>
+
+      <label>⏱️ Horário limite</label>
+      <input type="time" id="pulv-horario" required />
+      <div class="pulv-alerta-horario">⚠️ O card vai avisar: "PULVERIZAR ANTES DE <span id="pulv-horario-preview">--:--</span>"</div>
+
+      <button type="button" id="pulv-salvar" class="btn btn-primary btn-lg">Salvar e gerar card</button>
+
+      <div class="section-title" style="margin-top:28px;">Lançamentos já feitos</div>
+      <div class="search-bar">
+        <input type="search" id="pulv-busca" placeholder="Buscar por estufa, meeiro ou produto..." />
+      </div>
+      <div class="ferti-filtros">
+        <div class="ferti-filtros-datas">
+          <input type="date" id="pulv-filtro-data" />
+        </div>
+        <div id="pulv-limpar-filtro" class="link-acao">Limpar filtro</div>
+      </div>
+      <div id="pulv-historico-list">Carregando...</div>
+    `;
+
+    let lookups;
+    try {
+      lookups = await getLookupData();
+    } catch (e) {
+      console.error("Falha ao carregar dados da planilha:", e);
+      container.querySelector("#pulv-produtos-list").innerHTML = `<div class="empty-state">
+        Não foi possível carregar os dados da planilha (${escapeHtml(String(e.message || e))}).
+      </div>`;
+      return;
+    }
+
+    const produtoOpcoes = (lookups.produtos || [])
+      .filter((p) => p["Produto"])
+      .map((p) => ({
+        value: p["Produto"],
+        label: p["Produto"],
+        estoque: Number(p["Estoque"]) || 0,
+        dosagemCadastro: Number(p["Dosagem ML/20LT"]) || 0,
+      }));
+    const estufaOpcoes = (lookups.estufas || [])
+      .filter((e) => e["Estufa"])
+      .map((e) => ({ value: e["Estufa"], label: e["Estufa"] }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+    const meeiroOpcoes = (lookups.meeiros || [])
+      .filter((m) => m["Meeiro"])
+      .map((m) => ({ value: m["Meeiro"], label: m["Meeiro"] }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+    let estufasSelecionadas = [];
+    let meeirosSelecionados = [];
+    criarMultiComboBusca(container.querySelector("#pulv-estufa-combo"), estufaOpcoes, {
+      placeholder: "Buscar estufa...",
+      onChange: (vals) => (estufasSelecionadas = vals),
+    });
+    criarMultiComboBusca(container.querySelector("#pulv-meeiro-combo"), meeiroOpcoes, {
+      placeholder: "Buscar meeiro...",
+      onChange: (vals) => (meeirosSelecionados = vals),
+    });
+
+    // --- Lista dinâmica de produtos (um por linha) ---------------------------
+    const produtosList = container.querySelector("#pulv-produtos-list");
+    let proximoId = 1;
+    let produtosState = [{ id: proximoId++, produto: null, estoque: 0, dosagemCadastro: 0, dosagemManual: null }];
+
+    const renderProdutos = () => {
+      produtosList.innerHTML = produtosState
+        .map(
+          (p, idx) => `
+        <div class="pulv-produto-row" data-idx="${idx}">
+          <div class="pulv-produto-row-topo">
+            <label>🧴 Produto ${idx + 1}</label>
+            ${produtosState.length > 1 ? `<span class="pulv-remover-produto" data-idx="${idx}">Remover</span>` : ""}
+          </div>
+          <div class="pulv-produto-combo" data-idx="${idx}"></div>
+          <div class="produto-saldo-info" data-estoque="${idx}"></div>
+          <div class="total-calc-info" data-calda-cadastro="${idx}"></div>
+          <label>🧪 Dosagem (ajuste se precisar)</label>
+          <input type="number" step="0.01" class="pulv-dosagem-manual" data-idx="${idx}" />
+          <div class="total-calc-info" data-calda-manual="${idx}"></div>
+        </div>`
+        )
+        .join("");
+
+      produtosState.forEach((p, idx) => {
+        const comboEl = produtosList.querySelector(`.pulv-produto-combo[data-idx="${idx}"]`);
+        const estoqueEl = produtosList.querySelector(`[data-estoque="${idx}"]`);
+        const caldaCadastroEl = produtosList.querySelector(`[data-calda-cadastro="${idx}"]`);
+        const caldaManualEl = produtosList.querySelector(`[data-calda-manual="${idx}"]`);
+        const dosagemManualInput = produtosList.querySelector(`.pulv-dosagem-manual[data-idx="${idx}"]`);
+
+        // Semeia o campo com o que já estava guardado em memória ANTES de
+        // criar o combobox — necessário porque remover/adicionar outra linha
+        // reconstrói o HTML de todas (renderProdutos inteiro de novo), e sem
+        // isso a dosagem já digitada nessa linha se perderia por causa do
+        // "reseta a dosagem pro valor cadastrado" logo abaixo.
+        dosagemManualInput.value = p.dosagemManual ?? "";
+
+        // Quantidade de calda = Estoque × 1000 × Dosagem — fórmula confirmada
+        // explicitamente com o usuário em 10/10/2026 (ver cabeçalho do arquivo).
+        const atualizarCaldaManual = () => {
+          const dm = dosagemManualInput.value === "" ? null : Number(dosagemManualInput.value) || 0;
+          p.dosagemManual = dm;
+          const totalManual = p.estoque * 1000 * (dm || 0);
+          caldaManualEl.textContent =
+            dm > 0 ? `💧 Total de calda (dosagem informada): ${formatNumero(totalManual)}` : "💧 Total de calda: —";
+        };
+
+        criarComboBusca(comboEl, produtoOpcoes, {
+          valorInicial: p.produto || "",
+          placeholder: "Buscar produto...",
+          onChange: (opcao) => {
+            // Só reseta a dosagem manual pro valor cadastrado quando o
+            // PRODUTO realmente muda pra outro — não quando é só o re-render
+            // recriando o combobox com o MESMO produto já escolhido antes
+            // (ex.: depois de remover uma linha diferente), senão perderia
+            // qualquer ajuste manual que a pessoa já tivesse feito aqui.
+            const produtoAnterior = p.produto;
+            p.produto = opcao ? opcao.value : null;
+            p.estoque = opcao ? opcao.estoque : 0;
+            p.dosagemCadastro = opcao ? opcao.dosagemCadastro : 0;
+            estoqueEl.textContent = opcao ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}` : "";
+            const totalCadastro = p.estoque * 1000 * p.dosagemCadastro;
+            caldaCadastroEl.textContent = opcao
+              ? `🧪 Dosagem cadastrada: ${formatNumero(p.dosagemCadastro)} · 💧 Qtde de calda: ${formatNumero(totalCadastro)}`
+              : "";
+            if (!opcao) {
+              dosagemManualInput.value = "";
+            } else if (opcao.value !== produtoAnterior) {
+              dosagemManualInput.value = opcao.dosagemCadastro > 0 ? opcao.dosagemCadastro : "";
+            }
+            atualizarCaldaManual();
+          },
+        });
+
+        dosagemManualInput.addEventListener("input", atualizarCaldaManual);
+        atualizarCaldaManual();
+      });
+
+      produtosList.querySelectorAll(".pulv-remover-produto").forEach((el) => {
+        el.addEventListener("click", () => {
+          produtosState.splice(Number(el.dataset.idx), 1);
+          renderProdutos();
+        });
+      });
+    };
+    renderProdutos();
+
+    container.querySelector("#pulv-add-produto").addEventListener("click", () => {
+      produtosState.push({ id: proximoId++, produto: null, estoque: 0, dosagemCadastro: 0, dosagemManual: null });
+      renderProdutos();
+    });
+
+    // Prévia do texto do card, atualizada ao vivo conforme digita o horário.
+    const horarioInput = container.querySelector("#pulv-horario");
+    const horarioPreview = container.querySelector("#pulv-horario-preview");
+    horarioInput.addEventListener("input", () => {
+      horarioPreview.textContent = horarioInput.value || "--:--";
+    });
+
+    // --- Salvar + gerar card --------------------------------------------------
+    const salvarBtn = container.querySelector("#pulv-salvar");
+    salvarBtn.addEventListener("click", async () => {
+      if (salvarBtn.disabled) return; // trava contra duplo-toque (mesmo padrão da v20)
+
+      const data = container.querySelector("#pulv-data").value;
+      const horario = horarioInput.value;
+
+      if (!data) {
+        showToast("Informe a data.");
+        return;
+      }
+      if (estufasSelecionadas.length === 0) {
+        showToast("Selecione ao menos uma estufa.");
+        return;
+      }
+      if (meeirosSelecionados.length === 0) {
+        showToast("Selecione ao menos um meeiro.");
+        return;
+      }
+      if (!horario) {
+        showToast("Informe o horário limite.");
+        return;
+      }
+      const produtosValidos = produtosState.filter((p) => p.produto && Number(p.dosagemManual) > 0);
+      if (produtosValidos.length === 0) {
+        showToast("Informe ao menos um produto com dosagem válida.");
+        return;
+      }
+
+      salvarBtn.disabled = true;
+
+      const estufaTexto = estufasSelecionadas.join("/");
+      const meeiroTexto = meeirosSelecionados.join("/");
+
+      for (const p of produtosValidos) {
+        const fields = {
+          Bloco: "Pulverizacao",
+          Data: data,
+          Estufa: estufaTexto,
+          Meeiro: meeiroTexto,
+          Produto: p.produto,
+          Dosagem: p.dosagemManual,
+          "Horário": horario,
+        };
+        const erro = validateBeforeSend(fields, lookups);
+        if (erro) {
+          showToast(`Não foi possível enviar: ${erro}`);
+          salvarBtn.disabled = false;
+          return;
+        }
+        await queueAdd({ fields, origemTela: "Aplic" });
+      }
+
+      showToast("Pulverização gravada. Sincronizando...");
+      updateSyncIndicator();
+      if (navigator.onLine) syncQueueOnce().then(() => updateSyncIndicator());
+
+      await enviarCardPulverizacao({
+        estufasTexto: estufasSelecionadas.join(", "),
+        meeirosTexto: meeirosSelecionados.join(", "),
+        dataTexto: formatDataISOparaBR(data),
+        horario,
+        produtos: produtosValidos.map((p) => ({ nome: p.produto, dosagem: p.dosagemManual })),
+      });
+
+      // Re-renderiza a tela inteira (mesmo padrão de apontamentoLivre.js) —
+      // evita empilhar listeners e já limpa o formulário pro próximo lançamento.
+      this.render(container);
+    });
+
+    // --- Histórico (lançamentos já feitos), com filtro de data + busca ------
+    const historicoList = container.querySelector("#pulv-historico-list");
+    const buscaInput = container.querySelector("#pulv-busca");
+    const filtroDataInput = container.querySelector("#pulv-filtro-data");
+
+    let grupos = [];
+    try {
+      const rows = await readTable(TABLES.pulverizacao);
+      grupos = agruparPulverizacoes(rows.filter((r) => r["Estufa"] || r["Produto"]));
+    } catch (e) {
+      console.error("Falha ao carregar Pulverizacao:", e);
+      historicoList.innerHTML = `<div class="empty-state">Não foi possível carregar o histórico (${escapeHtml(
+        String(e.message || e)
+      )}).</div>`;
+      return;
+    }
+
+    const gruposPorChave = new Map(grupos.map((g) => [g.chave, g]));
+
+    const cardHistoricoHtml = (g) => `
+      <div class="card">
+        <div class="atividade-card-topo">
+          <div class="atividade-icone atividade-icone-azul">🚿</div>
+          <div style="flex:1; min-width:0;">
+            <div class="card-title">${escapeHtml((g.estufa || "—").split("/").join(", "))}</div>
+            <div class="card-sub">${[g.meeiro ? g.meeiro.split("/").join(", ") : "", formatExcelDate(g.data)]
+              .filter(Boolean)
+              .join(" · ")}</div>
+          </div>
+        </div>
+        ${g.produtos
+          .map((p) => `<div class="card-row"><span>${escapeHtml(p.nome)}</span><span>${formatNumero(p.dosagem)}</span></div>`)
+          .join("")}
+        <div class="card-row ferti-total-row"><span>Horário limite</span><span>${formatExcelHorario(g.horario)}</span></div>
+        <button type="button" class="btn-compartilhar" data-chave="${escapeHtml(g.chave)}">📲 Enviar por WhatsApp</button>
+      </div>`;
+
+    const renderHistorico = () => {
+      const termo = buscaInput.value.trim().toLowerCase();
+      const serialFiltro = filtroDataInput.value ? toExcelSerial(filtroDataInput.value) : null;
+
+      const filtrados = grupos.filter((g) => {
+        if (serialFiltro !== null && Math.floor(Number(g.data)) !== serialFiltro) return false;
+        if (termo) {
+          const alvo = [g.estufa, g.meeiro, ...g.produtos.map((p) => p.nome)].join(" ").toLowerCase();
+          if (!alvo.includes(termo)) return false;
+        }
+        return true;
+      });
+
+      if (filtrados.length === 0) {
+        historicoList.innerHTML = `<div class="empty-state">Nenhuma pulverização encontrada.</div>`;
+        return;
+      }
+      historicoList.innerHTML = filtrados.slice(0, 100).map(cardHistoricoHtml).join("");
+      historicoList.querySelectorAll(".btn-compartilhar").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const g = gruposPorChave.get(btn.dataset.chave);
+          if (!g) return;
+          enviarCardPulverizacao({
+            estufasTexto: (g.estufa || "").split("/").join(", "),
+            meeirosTexto: (g.meeiro || "").split("/").join(", "),
+            dataTexto: formatExcelDate(g.data),
+            horario: formatExcelHorario(g.horario),
+            produtos: g.produtos,
+          });
+        });
+      });
+    };
+
+    [buscaInput, filtroDataInput].forEach((el) => {
+      el.addEventListener("input", renderHistorico);
+      el.addEventListener("change", renderHistorico);
+    });
+    container.querySelector("#pulv-limpar-filtro").addEventListener("click", () => {
+      buscaInput.value = "";
+      filtroDataInput.value = "";
+      renderHistorico();
+    });
+
+    renderHistorico();
+  },
+};

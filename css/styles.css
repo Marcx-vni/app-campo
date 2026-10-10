@@ -466,6 +466,45 @@ textarea { resize: vertical; min-height: 60px; }
 .combo-vazio { color: var(--muted); cursor: default; }
 .combo-vazio:hover { background: none; }
 
+/* --- Multi-combo (seleção múltipla com chips, ex.: Estufa/Meeiro na Pulverização) --- */
+.multi-combo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.multi-combo-chips:empty { margin-bottom: 0; }
+.chip-removivel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--verde);
+  border-color: var(--verde);
+  color: white;
+  cursor: pointer;
+}
+.chip-x { opacity: 0.8; font-size: 11px; }
+.chip-removivel:active { background: var(--verde-medio); }
+
+/* --- Pulverização (tela Aplic.) --- */
+.pulv-produto-row {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.pulv-produto-row-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.pulv-produto-row-topo label { margin: 0; }
+.pulv-remover-produto { font-size: 12px; color: var(--terracota); font-weight: 500; cursor: pointer; }
+.pulv-alerta-horario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FBEDD8;
+  color: #8A5A1E;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 10px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 /* --- Lista vertical de seleção (Estufa / Meeiro / Fornecedor) --- */
 .lista-selecao { display: flex; flex-direction: column; gap: 8px; }
 .lista-selecao-item {

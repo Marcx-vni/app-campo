@@ -8,6 +8,7 @@ const routes = {
   ferti: (el) => ScreenFertiConsulta.render(el),
   ordem: (el, params) => ScreenOrdemCard.render(el, params.id),
   apontamento: (el) => ScreenApontamentoLivre.render(el),
+  aplic: (el) => ScreenAplic.render(el),
   estoque: (el) => ScreenEstoque.render(el),
   financeiro: (el) => ScreenFinanceiro.render(el),
   meeiro: (el) => ScreenMeeiro.render(el),
