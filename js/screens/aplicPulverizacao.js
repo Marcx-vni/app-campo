@@ -56,14 +56,44 @@ function formatExcelHorario(serial) {
 // Estufa + Meeiro + Horário = um único card, com a lista de produtos dentro)
 // — espelha como a própria planilha é preenchida: um lançamento de várias
 // estufas/meeiros/produtos vira várias linhas repetindo esses 4 campos.
-function agruparPulverizacoes(rows) {
+//
+// `chaves` (opcional): nomes REAIS dos cabeçalhos pra cada campo, resolvidos
+// com `acharChavePorNomeOuPosicao()` (graph.js) antes de chamar essa função
+// — proteção contra a planilha ter um cabeçalho diferente do esperado (ex.:
+// alguém editou a tabela direto no Excel e mexeu sem querer no texto de um
+// cabeçalho, ou inseriu/renomeou uma coluna). Sem isso, passa a usar os
+// nomes padrão ("Dosagem", "Horário" etc.) — ver "Erros já investigados e
+// resolvidos" (10/10/2026) pro caso real que motivou essa proteção.
+function agruparPulverizacoes(rows, chaves = {}) {
+  const kData = chaves.data || "Data";
+  const kEstufa = chaves.estufa || "Estufa";
+  const kMeeiro = chaves.meeiro || "Meeiro";
+  const kProduto = chaves.produto || "Produto";
+  const kDosagem = chaves.dosagem || "Dosagem";
+  const kHorario = chaves.horario || "Horário";
+  const kObservacao = chaves.observacao; // undefined se a coluna não existir — ok
+
   const grupos = new Map();
   rows.forEach((r) => {
-    const key = [r["Data"], r["Estufa"], r["Meeiro"], r["Horário"]].map((v) => String(v ?? "")).join("||");
+    const key = [r[kData], r[kEstufa], r[kMeeiro], r[kHorario]].map((v) => String(v ?? "")).join("||");
     if (!grupos.has(key)) {
-      grupos.set(key, { chave: key, data: r["Data"], estufa: r["Estufa"], meeiro: r["Meeiro"], horario: r["Horário"], produtos: [] });
+      grupos.set(key, {
+        chave: key,
+        data: r[kData],
+        estufa: r[kEstufa],
+        meeiro: r[kMeeiro],
+        horario: r[kHorario],
+        observacao: "",
+        produtos: [],
+      });
     }
-    grupos.get(key).produtos.push({ nome: r["Produto"] || "—", dosagem: Number(r["Dosagem"]) || 0 });
+    const grupo = grupos.get(key);
+    grupo.produtos.push({ nome: r[kProduto] || "—", dosagem: Number(r[kDosagem]) || 0 });
+    // Pega a primeira observação não vazia que aparecer entre as linhas desse
+    // lançamento (normalmente só a primeira linha teria preenchida).
+    if (!grupo.observacao && kObservacao && r[kObservacao]) {
+      grupo.observacao = String(r[kObservacao]).trim();
+    }
   });
   return Array.from(grupos.values()).sort((a, b) => (Number(b.data) || 0) - (Number(a.data) || 0));
 }
@@ -554,7 +584,23 @@ const ScreenAplic = {
     let grupos = [];
     try {
       const rows = await readTable(TABLES.pulverizacao);
-      grupos = agruparPulverizacoes(rows.filter((r) => r["Estufa"] || r["Produto"]));
+      // Resolve os nomes REAIS dos cabeçalhos antes de usar — proteção contra
+      // a tabela ter sido editada direto no Excel (coluna inserida, cabeçalho
+      // renomeado sem querer etc.); cai pra posição (0-based: Data=0...
+      // Horário=5) quando o nome não bate. `acharChavePorNomeOuPosicao` já
+      // existe em `graph.js`, mesmo padrão usado pro Cadastro de Produtos.
+      // "observacao" é opcional — undefined até a planilha ter essa coluna
+      // (ex.: uma coluna G adicionada manualmente pelo usuário).
+      const chaves = {
+        data: acharChavePorNomeOuPosicao(rows, ["data"], 0) ?? "Data",
+        estufa: acharChavePorNomeOuPosicao(rows, ["estufa"], 1) ?? "Estufa",
+        meeiro: acharChavePorNomeOuPosicao(rows, ["meeiro"], 2) ?? "Meeiro",
+        produto: acharChavePorNomeOuPosicao(rows, ["produto"], 3) ?? "Produto",
+        dosagem: acharChavePorNomeOuPosicao(rows, ["dosagem"], 4) ?? "Dosagem",
+        horario: acharChavePorNomeOuPosicao(rows, ["horario", "horariolimite"], 5) ?? "Horário",
+        observacao: acharChavePorNomeOuPosicao(rows, ["observacao", "obs", "observacoes", "textoextra"], 6),
+      };
+      grupos = agruparPulverizacoes(rows.filter((r) => r[chaves.estufa] || r[chaves.produto]), chaves);
     } catch (e) {
       console.error("Falha ao carregar Pulverizacao:", e);
       historicoList.innerHTML = `<div class="empty-state">Não foi possível carregar o histórico (${escapeHtml(
@@ -580,6 +626,7 @@ const ScreenAplic = {
           .map((p) => `<div class="card-row"><span>${escapeHtml(p.nome)}</span><span>${formatNumero(p.dosagem)}</span></div>`)
           .join("")}
         <div class="card-row ferti-total-row"><span>Horário limite</span><span>${formatExcelHorario(g.horario)}</span></div>
+        ${g.observacao ? `<div class="card-sub" style="margin-top:4px;">📝 ${escapeHtml(g.observacao)}</div>` : ""}
         <button type="button" class="btn-compartilhar" data-chave="${escapeHtml(g.chave)}">📲 Enviar por WhatsApp</button>
       </div>`;
 
@@ -606,6 +653,7 @@ const ScreenAplic = {
             dataTexto: formatExcelDate(g.data),
             horario: formatExcelHorario(g.horario),
             produtos: g.produtos,
+            observacao: g.observacao,
           });
         });
       });
@@ -642,6 +690,7 @@ const ScreenAplic = {
           dataTexto: formatExcelDate(g.data),
           horario: formatExcelHorario(g.horario),
           produtos: g.produtos,
+          observacao: g.observacao,
         });
       }
       enviarTodosBtn.disabled = false;
