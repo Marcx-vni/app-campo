@@ -239,7 +239,7 @@ async function gerarCardPulverizacaoPng(dados) {
   const yFixo = linhasObs.length ? y + 24 : y + altAlerta / 2 - 13;
   const yFixo2 = linhasObs.length ? y + 50 : y + altAlerta / 2 + 13;
   ctx.font = `700 16px ${fonte}`;
-  ctx.fillText(`PULVERIZAR ANTES DAS ${dados.horario || "—"}`, largura / 2, yFixo);
+  ctx.fillText(`INICIAR A PULVERIZAÇÃO ANTES DAS ${dados.horario || "—"}`, largura / 2, yFixo);
   ctx.font = `700 13px ${fonte}`;
   ctx.fillText("⚠️ ALERTA - RISCO DE FITO NA PLANTA", largura / 2, yFixo2);
   if (linhasObs.length) {
