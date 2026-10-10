@@ -20,6 +20,19 @@
 //   unidade da coluna "Dosagem ML/20LT" do cadastro).
 // ============================================================================
 
+// Grupos de produto liberados pra pulverização (pedido do usuário,
+// 10/10/2026) — compara sem acento/caixa pra não depender de como foi
+// digitado na planilha ("BIOLÓGICO" vs "BIOLOGICO", por ex.).
+const PULV_GRUPOS_PERMITIDOS = new Set(["DEFENSIVO", "BIOLOGICO", "FOLIARES"]);
+function _pulvGrupoPermitido(grupo) {
+  const norm = String(grupo || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+  return PULV_GRUPOS_PERMITIDOS.has(norm);
+}
+
 // Litros de calda que dá pra preparar com o estoque disponível, dada uma
 // dosagem "por 20L" (mesma unidade de "Dosagem ML/20LT" no cadastro).
 // Ver nota no cabeçalho do arquivo sobre a fórmula.
@@ -61,18 +74,17 @@ function agruparPulverizacoes(rows) {
 // fito — texto exato pedido pelo usuário em 10/10/2026). Essa faixa é o único
 // lugar com o aviso — não existe mais uma caixa equivalente na tela do app
 // (removida a pedido do usuário: "basta estar no card que enviamos").
-// dados: { estufasTexto, meeirosTexto, dataTexto, horario, produtos: [{nome, dosagem}] }
+// dados: { estufasList: [nome,...], meeirosList: [nome,...], dataTexto, horario, produtos: [{nome, dosagem}] }
 async function gerarCardPulverizacaoPng(dados) {
   const fonte = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
   const escala = 2;
   const colProduto = 230;
-  const colDosagem = 120;
+  const colDosagem = 130;
   const altCabecalho = 40;
   const altLinhaBase = 42;
   const altAlerta = 72;
   const raio = 22;
   const alturaLinhaTexto = 17;
-  const maxLinhasInfo = 2;
   const maxLinhasProduto = 2;
 
   const medCtx = document.createElement("canvas").getContext("2d");
@@ -82,10 +94,17 @@ async function gerarCardPulverizacaoPng(dados) {
   const larguraTabela = colProduto + colDosagem;
   let largura = Math.max(larguraTabela, larguraTitulo, 320);
 
+  // Meeiro(s) primeiro, um por linha, depois Estufa(s), também uma por linha
+  // (pedido explícito do usuário em 10/10/2026 — antes vinha tudo junto numa
+  // linha só, separado por vírgula).
   medCtx.font = `13.5px ${fonte}`;
-  const linhasEstufa = quebrarTextoCanvas(medCtx, `🌿 ${dados.estufasTexto || "—"}`, largura - 44, maxLinhasInfo);
-  const linhasMeeiro = quebrarTextoCanvas(medCtx, `🤝 ${dados.meeirosTexto || "—"}`, largura - 44, maxLinhasInfo);
-  const linhasHeaderInfo = [...linhasEstufa, ...linhasMeeiro];
+  const larguraInfoDisponivel = largura - 44 - 22; // -22 reserva espaço do ícone antes do texto
+  const meeirosList = dados.meeirosList && dados.meeirosList.length ? dados.meeirosList : ["—"];
+  const estufasList = dados.estufasList && dados.estufasList.length ? dados.estufasList : ["—"];
+  const linhasHeaderInfo = [
+    ...meeirosList.map((nome) => `🤝 ${truncarTextoCanvas(medCtx, nome, larguraInfoDisponivel)}`),
+    ...estufasList.map((nome) => `🌿 ${truncarTextoCanvas(medCtx, nome, larguraInfoDisponivel)}`),
+  ];
   const altHeader = 46 + linhasHeaderInfo.length * alturaLinhaTexto + 12;
 
   medCtx.font = `600 14px ${fonte}`;
@@ -148,7 +167,7 @@ async function gerarCardPulverizacaoPng(dados) {
   ctx.textAlign = "left";
   ctx.fillText("Produto", 16, y + altCabecalho / 2);
   ctx.textAlign = "center";
-  ctx.fillText("Dosagem", colProduto + colDosagem / 2, y + altCabecalho / 2);
+  ctx.fillText("Dosagem/20LT", colProduto + colDosagem / 2, y + altCabecalho / 2);
   y += altCabecalho;
 
   // Uma linha por produto.
@@ -200,26 +219,28 @@ async function enviarCardPulverizacao(dados) {
 const ScreenAplic = {
   async render(container) {
     container.innerHTML = `
-      <h2 class="page-title">Aplic. (Pulverização)</h2>
-      <p class="page-subtitle">Registre a pulverização e gere o card de aviso pros meeiros</p>
+      <div id="pulv-form-wrap">
+        <h2 class="page-title">Aplic. (Pulverização)</h2>
+        <p class="page-subtitle">Registre a pulverização e gere o card de aviso pros meeiros</p>
 
-      <label>📅 Data</label>
-      <input type="date" id="pulv-data" value="${new Date().toISOString().slice(0, 10)}" required />
+        <label>📅 Data</label>
+        <input type="date" id="pulv-data" value="${new Date().toISOString().slice(0, 10)}" required />
 
-      <label>🌿 Estufa (pode escolher mais de uma)</label>
-      <div id="pulv-estufa-combo"></div>
+        <label>🌿 Estufa (pode escolher mais de uma)</label>
+        <div id="pulv-estufa-combo"></div>
 
-      <label>🤝 Meeiro (pode escolher mais de um)</label>
-      <div id="pulv-meeiro-combo"></div>
+        <label>🤝 Meeiro (pode escolher mais de um)</label>
+        <div id="pulv-meeiro-combo"></div>
 
-      <div class="section-title">Produtos</div>
-      <div id="pulv-produtos-list"></div>
-      <button type="button" id="pulv-add-produto" class="btn btn-secondary btn-sm">+ Adicionar produto</button>
+        <div class="section-title">Produtos</div>
+        <div id="pulv-produtos-list"></div>
+        <button type="button" id="pulv-add-produto" class="btn btn-secondary btn-sm">+ Adicionar produto</button>
 
-      <label>⏱️ Horário limite</label>
-      <input type="time" id="pulv-horario" required />
+        <label>⏱️ Horário limite</label>
+        <input type="time" id="pulv-horario" required />
 
-      <button type="button" id="pulv-salvar" class="btn btn-primary btn-lg">Salvar e gerar card</button>
+        <button type="button" id="pulv-salvar" class="btn btn-primary btn-lg">Salvar lançamento</button>
+      </div>
 
       <div class="section-title" style="margin-top:28px;">Lançamentos já feitos</div>
       <div class="ferti-filtros">
@@ -243,16 +264,28 @@ const ScreenAplic = {
       return;
     }
 
+    // Só produtos com estoque disponível e dos grupos usados em pulverização
+    // (DEFENSIVO/BIOLÓGICO/FOLIARES) — pedido do usuário em 10/10/2026, pra
+    // não misturar com fertilizante ou outro insumo que não se aplica assim.
     const produtoOpcoes = (lookups.produtos || [])
-      .filter((p) => p["Produto"])
+      .filter((p) => p["Produto"] && Number(p["Estoque"]) > 0 && _pulvGrupoPermitido(p["Grupo"]))
       .map((p) => ({
         value: p["Produto"],
         label: p["Produto"],
         estoque: Number(p["Estoque"]) || 0,
         dosagemCadastro: Number(p["Dosagem ML/20LT"]) || 0,
       }));
+    // Só estufas com plantio ATIVO (aba "Plantio", coluna "Status" = "Ativo")
+    // — pedido do usuário em 10/10/2026, mesmo filtro já usado em
+    // dataPlantioAtiva()/sugerirDAT() (apontamento.js) pra achar o plantio
+    // ativo de uma estufa.
+    const estufasAtivasSet = new Set(
+      (lookups.plantio || [])
+        .filter((p) => p["Estufa"] && String(p["Status"]).trim().toLowerCase() === "ativo")
+        .map((p) => p["Estufa"])
+    );
     const estufaOpcoes = (lookups.estufas || [])
-      .filter((e) => e["Estufa"])
+      .filter((e) => e["Estufa"] && estufasAtivasSet.has(e["Estufa"]))
       .map((e) => ({ value: e["Estufa"], label: e["Estufa"] }))
       .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
     const meeiroOpcoes = (lookups.meeiros || [])
@@ -432,18 +465,48 @@ const ScreenAplic = {
       if (navigator.onLine) await syncQueueOnce();
       updateSyncIndicator();
 
-      await enviarCardPulverizacao({
-        estufasTexto: estufasSelecionadas.join(", "),
-        meeirosTexto: meeirosSelecionados.join(", "),
+      const dadosCard = {
+        estufasList: estufasSelecionadas.slice(),
+        meeirosList: meeirosSelecionados.slice(),
         dataTexto: formatDataISOparaBR(data),
         horario,
         produtos: produtosValidos.map((p) => ({ nome: p.produto, dosagem: p.dosagemManual })),
-      });
+      };
 
-      // Re-renderiza a tela inteira (mesmo padrão de apontamentoLivre.js) —
-      // evita empilhar listeners e já limpa o formulário pro próximo lançamento.
-      this.render(container);
+      // NÃO chama enviarCardPulverizacao() direto aqui — pedido do usuário em
+      // 10/10/2026 ("está gerando um comando para salvar o card, não precisa,
+      // é só enviar por WhatsApp"). Causa real: até chegar aqui já passaram
+      // dois `await` (queueAdd em loop + syncQueueOnce), e em boa parte dos
+      // navegadores/celulares o navigator.share() só funciona se chamado
+      // ainda "dentro" do toque original (user activation) — depois de vários
+      // awaits essa janela já tinha passado, então compartilharArquivo()
+      // (app.js) caía no fallback de BAIXAR o arquivo em vez de abrir o menu
+      // de compartilhar do WhatsApp. Corrigido trocando o envio automático por
+      // um botão "Enviar por WhatsApp" que a pessoa toca depois de salvar —
+      // esse toque é novo e direto, então o compartilhamento abre certo.
+      mostrarConfirmacaoEnvio(dadosCard);
     });
+
+    const mostrarConfirmacaoEnvio = (dadosCard) => {
+      const wrap = container.querySelector("#pulv-form-wrap");
+      wrap.innerHTML = `
+        <div class="card" style="text-align:center;">
+          <div style="font-size:15px; font-weight:600; margin-bottom:4px;">✅ Pulverização gravada!</div>
+          <p class="page-subtitle" style="margin-bottom:16px;">Toque abaixo pra enviar o card no WhatsApp.</p>
+          <button type="button" id="pulv-confirmar-enviar" class="btn btn-primary btn-lg btn-block">📲 Enviar por WhatsApp</button>
+          <button type="button" id="pulv-novo-lancamento" class="btn btn-secondary btn-block" style="margin-top:10px;">➕ Novo lançamento</button>
+        </div>
+      `;
+      wrap.querySelector("#pulv-confirmar-enviar").addEventListener("click", () => {
+        // Toque direto do usuário, sem nenhum await antes — mantém a "user
+        // activation" válida pro navigator.share() abrir o WhatsApp de
+        // verdade em vez de cair no fallback de baixar o arquivo.
+        enviarCardPulverizacao(dadosCard);
+      });
+      wrap.querySelector("#pulv-novo-lancamento").addEventListener("click", () => {
+        this.render(container);
+      });
+    };
 
     // --- Histórico (lançamentos já feitos), com filtro de data --------------
     const historicoList = container.querySelector("#pulv-historico-list");
@@ -500,8 +563,8 @@ const ScreenAplic = {
           const g = gruposPorChave.get(btn.dataset.chave);
           if (!g) return;
           enviarCardPulverizacao({
-            estufasTexto: (g.estufa || "").split("/").join(", "),
-            meeirosTexto: (g.meeiro || "").split("/").join(", "),
+            estufasList: (g.estufa || "").split("/").filter(Boolean),
+            meeirosList: (g.meeiro || "").split("/").filter(Boolean),
             dataTexto: formatExcelDate(g.data),
             horario: formatExcelHorario(g.horario),
             produtos: g.produtos,
@@ -536,8 +599,8 @@ const ScreenAplic = {
       enviarTodosBtn.disabled = true;
       for (const g of doDia) {
         await enviarCardPulverizacao({
-          estufasTexto: (g.estufa || "").split("/").join(", "),
-          meeirosTexto: (g.meeiro || "").split("/").join(", "),
+          estufasList: (g.estufa || "").split("/").filter(Boolean),
+          meeirosList: (g.meeiro || "").split("/").filter(Boolean),
           dataTexto: formatExcelDate(g.data),
           horario: formatExcelHorario(g.horario),
           produtos: g.produtos,
