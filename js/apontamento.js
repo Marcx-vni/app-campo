@@ -45,7 +45,13 @@ const FINANCEIRO_COMPUTED = new Set(["Data Pagamento", "Valor Pago", "Dias em At
 // "/" — ex.: "ESTUFA BAIXA/ESTUFA 1J" — não um código. Uma linha por Produto
 // (o mesmo lançamento, com várias estufas/meeiros/produtos, vira várias
 // linhas repetindo Data/Estufa/Meeiro/Horário e variando só Produto/Dosagem).
-const REGISTRO_PULVERIZACAO_COLUMNS = ["Data", "Estufa", "Meeiro", "Produto", "Dosagem", "Horário"];
+// "Observação" (coluna G) foi adicionada pelo usuário na planilha em
+// 10/10/2026 — até a v26 o app continuou gravando só 6 colunas, o que passou
+// a quebrar TODA gravação nessa tabela assim que a coluna virou parte real da
+// Tabela do Excel (erro Graph 400 "doesn't match the size or dimensions of
+// the range", visto pelo usuário com 278 itens presos na fila). Corrigido na
+// v27 estendendo pra 7 colunas.
+const REGISTRO_PULVERIZACAO_COLUMNS = ["Data", "Estufa", "Meeiro", "Produto", "Dosagem", "Horário", "Observação"];
 const REGISTRO_PULVERIZACAO_COMPUTED = new Set();
 
 function montarLinha(colunas, computadas, valores) {
@@ -501,6 +507,7 @@ function prepararRegistro(fields, lookups, seq, usuario) {
       "Produto": fields["Produto"],
       "Dosagem": Number(fields["Dosagem"]) || 0,
       "Horário": toExcelTimeSerial(fields["Horário"]),
+      "Observação": fields["Observação"] || null,
     };
   }
 

@@ -496,6 +496,7 @@ const ScreenAplic = {
 
       const estufaTexto = estufasSelecionadas.join("/");
       const meeiroTexto = meeirosSelecionados.join("/");
+      const observacaoTexto = observacaoInput.value.trim();
 
       for (const p of produtosValidos) {
         const fields = {
@@ -506,6 +507,13 @@ const ScreenAplic = {
           Produto: p.produto,
           Dosagem: p.dosagemManual,
           "Horário": horario,
+          // Coluna G adicionada pelo usuário na planilha em 10/10/2026 — ver
+          // "Erros já investigados e resolvidos" (v27: a tabela real passou a
+          // ter 7 colunas e o app continuava gravando só 6, quebrando TODAS as
+          // gravações com erro 400 do Graph "doesn't match the size or
+          // dimensions of the range"). Agora grava de verdade (antes só ia
+          // pro card do envio na hora, nunca persistia).
+          "Observação": observacaoTexto || null,
         };
         const erro = validateBeforeSend(fields, lookups);
         if (erro) {
@@ -531,11 +539,10 @@ const ScreenAplic = {
       const dadosCard = {
         estufasList: estufasSelecionadas.slice(),
         meeirosList: meeirosSelecionados.slice(),
-        // Observação livre (opcional) — não existe coluna pra isso na tabela
-        // Pulverizacao, então só vai pro card desse envio na hora; reenviar
-        // esse mesmo lançamento depois pelo histórico não traz essa
-        // observação de volta (ver nota no arquivo).
-        observacao: observacaoInput.value.trim(),
+        // Desde a v27 a Observação é gravada na coluna G da tabela Pulverizacao
+        // (ver `fields["Observação"]` acima), então reenviar esse lançamento
+        // depois pelo histórico também traz essa observação de volta.
+        observacao: observacaoTexto,
         dataTexto: formatDataISOparaBR(data),
         horario,
         produtos: produtosValidos.map((p) => ({ nome: p.produto, dosagem: p.dosagemManual })),
