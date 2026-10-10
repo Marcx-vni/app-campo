@@ -11,12 +11,23 @@
 // - Pode lançar VÁRIOS produtos de uma vez (um por linha, cada um com sua
 //   própria dosagem) — cada produto vira uma linha própria na tabela
 //   Pulverizacao, repetindo Data/Estufa/Meeiro/Horário.
-// - "Quantidade de calda" é só uma CONTA MOSTRADA NA TELA pra ajudar a
-//   decidir a dosagem — não existe coluna pra isso na planilha (confirmado
-//   com o usuário, print da tabela real em 10/10/2026). Fórmula confirmada
-//   EXPLICITAMENTE com o usuário (mesmo parecendo estranha dimensionalmente):
-//   Estoque × 1000 × Dosagem — não dividir, foi perguntado e confirmado assim.
+// - "Total Calda em LT" é só uma CONTA MOSTRADA NA TELA pra ajudar a decidir
+//   a dosagem — não existe coluna pra isso na planilha (confirmado com o
+//   usuário, print da tabela real em 10/10/2026). Fórmula (corrigida em
+//   10/10/2026, depois de testar a primeira versão): ((Estoque × 1000) ÷
+//   Dosagem) × 20 — quantos litros de calda dá pra preparar com o estoque
+//   disponível, considerando que a Dosagem cadastrada é "por 20L" (mesma
+//   unidade da coluna "Dosagem ML/20LT" do cadastro).
 // ============================================================================
+
+// Litros de calda que dá pra preparar com o estoque disponível, dada uma
+// dosagem "por 20L" (mesma unidade de "Dosagem ML/20LT" no cadastro).
+// Ver nota no cabeçalho do arquivo sobre a fórmula.
+function calcularTotalCaldaLitros(estoque, dosagem) {
+  const d = Number(dosagem) || 0;
+  if (d <= 0) return 0;
+  return ((Number(estoque) || 0) * 1000) / d * 20;
+}
 
 // Horário gravado como fração do dia (padrão Excel) -> "HH:MM" pra exibir.
 // Inverso de toExcelTimeSerial (apontamento.js).
@@ -46,8 +57,10 @@ function agruparPulverizacoes(rows) {
 
 // Gera a imagem (PNG) do card de Pulverização pronto pra WhatsApp — mesmo
 // padrão visual dos outros cards do app (gerarCardFertiPng, home.js), com uma
-// faixa de alerta chamativa no rodapé pro horário limite (pedido explícito do
-// usuário: "texto bem chamativo 'PULVERIZAR ANTES DE (Horário)'").
+// faixa de alerta chamativa no rodapé (duas linhas: horário limite + risco de
+// fito — texto exato pedido pelo usuário em 10/10/2026). Essa faixa é o único
+// lugar com o aviso — não existe mais uma caixa equivalente na tela do app
+// (removida a pedido do usuário: "basta estar no card que enviamos").
 // dados: { estufasTexto, meeirosTexto, dataTexto, horario, produtos: [{nome, dosagem}] }
 async function gerarCardPulverizacaoPng(dados) {
   const fonte = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
@@ -56,7 +69,7 @@ async function gerarCardPulverizacaoPng(dados) {
   const colDosagem = 120;
   const altCabecalho = 40;
   const altLinhaBase = 42;
-  const altAlerta = 58;
+  const altAlerta = 72;
   const raio = 22;
   const alturaLinhaTexto = 17;
   const maxLinhasInfo = 2;
@@ -159,13 +172,15 @@ async function gerarCardPulverizacaoPng(dados) {
   });
 
   // Faixa de alerta — chamativa de propósito (fundo terracota, texto branco
-  // grande), pedido explícito do usuário pro horário não passar despercebido.
+  // grande, duas linhas): texto exato pedido pelo usuário em 10/10/2026.
   ctx.fillStyle = "#C9603D";
   ctx.fillRect(0, y, largura, altAlerta);
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = `700 17px ${fonte}`;
   ctx.textAlign = "center";
-  ctx.fillText(`⚠️ PULVERIZAR ANTES DE ${dados.horario || "—"}`, largura / 2, y + altAlerta / 2);
+  ctx.font = `700 16px ${fonte}`;
+  ctx.fillText(`PULVERIZAR ANTES DAS ${dados.horario || "—"}`, largura / 2, y + altAlerta / 2 - 13);
+  ctx.font = `700 13px ${fonte}`;
+  ctx.fillText("⚠️ ALERTA - RISCO DE FITO NA PLANTA", largura / 2, y + altAlerta / 2 + 13);
 
   ctx.restore();
 
@@ -203,21 +218,18 @@ const ScreenAplic = {
 
       <label>⏱️ Horário limite</label>
       <input type="time" id="pulv-horario" required />
-      <div class="pulv-alerta-horario">⚠️ O card vai avisar: "PULVERIZAR ANTES DE <span id="pulv-horario-preview">--:--</span>"</div>
 
       <button type="button" id="pulv-salvar" class="btn btn-primary btn-lg">Salvar e gerar card</button>
 
       <div class="section-title" style="margin-top:28px;">Lançamentos já feitos</div>
-      <div class="search-bar">
-        <input type="search" id="pulv-busca" placeholder="Buscar por estufa, meeiro ou produto..." />
-      </div>
       <div class="ferti-filtros">
         <div class="ferti-filtros-datas">
           <input type="date" id="pulv-filtro-data" />
         </div>
         <div id="pulv-limpar-filtro" class="link-acao">Limpar filtro</div>
       </div>
-      <div id="pulv-historico-list">Carregando...</div>
+      <button type="button" id="pulv-enviar-todos" class="btn btn-secondary btn-block">📲 Enviar todos os cards do dia</button>
+      <div id="pulv-historico-list" style="margin-top:12px;">Carregando...</div>
     `;
 
     let lookups;
@@ -297,14 +309,14 @@ const ScreenAplic = {
         // "reseta a dosagem pro valor cadastrado" logo abaixo.
         dosagemManualInput.value = p.dosagemManual ?? "";
 
-        // Quantidade de calda = Estoque × 1000 × Dosagem — fórmula confirmada
-        // explicitamente com o usuário em 10/10/2026 (ver cabeçalho do arquivo).
+        // Total Calda em LT = ((Estoque × 1000) ÷ Dosagem) × 20 — ver
+        // calcularTotalCaldaLitros no topo do arquivo.
         const atualizarCaldaManual = () => {
           const dm = dosagemManualInput.value === "" ? null : Number(dosagemManualInput.value) || 0;
           p.dosagemManual = dm;
-          const totalManual = p.estoque * 1000 * (dm || 0);
+          const totalManual = calcularTotalCaldaLitros(p.estoque, dm);
           caldaManualEl.textContent =
-            dm > 0 ? `💧 Total de calda (dosagem informada): ${formatNumero(totalManual)}` : "💧 Total de calda: —";
+            dm > 0 ? `💧 Total Calda em LT (dosagem informada): ${formatNumero(totalManual)} L` : "💧 Total Calda em LT: —";
         };
 
         criarComboBusca(comboEl, produtoOpcoes, {
@@ -321,9 +333,9 @@ const ScreenAplic = {
             p.estoque = opcao ? opcao.estoque : 0;
             p.dosagemCadastro = opcao ? opcao.dosagemCadastro : 0;
             estoqueEl.textContent = opcao ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}` : "";
-            const totalCadastro = p.estoque * 1000 * p.dosagemCadastro;
+            const totalCadastro = calcularTotalCaldaLitros(p.estoque, p.dosagemCadastro);
             caldaCadastroEl.textContent = opcao
-              ? `🧪 Dosagem cadastrada: ${formatNumero(p.dosagemCadastro)} · 💧 Qtde de calda: ${formatNumero(totalCadastro)}`
+              ? `🧪 Dosagem cadastrada: ${formatNumero(p.dosagemCadastro)} · 💧 Total Calda em LT: ${formatNumero(totalCadastro)} L`
               : "";
             if (!opcao) {
               dosagemManualInput.value = "";
@@ -352,12 +364,7 @@ const ScreenAplic = {
       renderProdutos();
     });
 
-    // Prévia do texto do card, atualizada ao vivo conforme digita o horário.
     const horarioInput = container.querySelector("#pulv-horario");
-    const horarioPreview = container.querySelector("#pulv-horario-preview");
-    horarioInput.addEventListener("input", () => {
-      horarioPreview.textContent = horarioInput.value || "--:--";
-    });
 
     // --- Salvar + gerar card --------------------------------------------------
     const salvarBtn = container.querySelector("#pulv-salvar");
@@ -415,7 +422,15 @@ const ScreenAplic = {
 
       showToast("Pulverização gravada. Sincronizando...");
       updateSyncIndicator();
-      if (navigator.onLine) syncQueueOnce().then(() => updateSyncIndicator());
+      // Diferente dos outros blocos (que disparam a sincronização em segundo
+      // plano, sem esperar): aqui ESPERAMOS a sincronização terminar antes de
+      // re-renderizar, porque o histórico logo abaixo relê a tabela Pulverizacao
+      // DIRETO da planilha — sem esperar, o re-render buscava os dados antes da
+      // gravação ter de fato chegado lá, e o lançamento recém-feito "sumia" do
+      // histórico até a pessoa sair e voltar pra tela (bug relatado pelo usuário
+      // em 10/10/2026).
+      if (navigator.onLine) await syncQueueOnce();
+      updateSyncIndicator();
 
       await enviarCardPulverizacao({
         estufasTexto: estufasSelecionadas.join(", "),
@@ -430,10 +445,10 @@ const ScreenAplic = {
       this.render(container);
     });
 
-    // --- Histórico (lançamentos já feitos), com filtro de data + busca ------
+    // --- Histórico (lançamentos já feitos), com filtro de data --------------
     const historicoList = container.querySelector("#pulv-historico-list");
-    const buscaInput = container.querySelector("#pulv-busca");
     const filtroDataInput = container.querySelector("#pulv-filtro-data");
+    const enviarTodosBtn = container.querySelector("#pulv-enviar-todos");
 
     let grupos = [];
     try {
@@ -468,15 +483,10 @@ const ScreenAplic = {
       </div>`;
 
     const renderHistorico = () => {
-      const termo = buscaInput.value.trim().toLowerCase();
       const serialFiltro = filtroDataInput.value ? toExcelSerial(filtroDataInput.value) : null;
 
       const filtrados = grupos.filter((g) => {
         if (serialFiltro !== null && Math.floor(Number(g.data)) !== serialFiltro) return false;
-        if (termo) {
-          const alvo = [g.estufa, g.meeiro, ...g.produtos.map((p) => p.nome)].join(" ").toLowerCase();
-          if (!alvo.includes(termo)) return false;
-        }
         return true;
       });
 
@@ -500,14 +510,40 @@ const ScreenAplic = {
       });
     };
 
-    [buscaInput, filtroDataInput].forEach((el) => {
-      el.addEventListener("input", renderHistorico);
-      el.addEventListener("change", renderHistorico);
-    });
+    filtroDataInput.addEventListener("input", renderHistorico);
+    filtroDataInput.addEventListener("change", renderHistorico);
     container.querySelector("#pulv-limpar-filtro").addEventListener("click", () => {
-      buscaInput.value = "";
       filtroDataInput.value = "";
       renderHistorico();
+    });
+
+    // "Enviar todos os cards do dia" — manda, em sequência, o card de cada
+    // lançamento do dia escolhido no filtro (ou de hoje, se nenhum filtro
+    // estiver ativo), pra não precisar abrir um por um quando pulverizou
+    // várias estufas/meeiros diferentes no mesmo dia. Cada compartilhamento
+    // só avança pro próximo depois do anterior fechar (toque do usuário no
+    // menu nativo de compartilhar) — é assim que o sistema operacional espera
+    // múltiplos compartilhamentos em sequência.
+    enviarTodosBtn.addEventListener("click", async () => {
+      const serialAlvo = filtroDataInput.value
+        ? toExcelSerial(filtroDataInput.value)
+        : toExcelSerial(new Date().toISOString().slice(0, 10));
+      const doDia = grupos.filter((g) => Math.floor(Number(g.data)) === serialAlvo);
+      if (doDia.length === 0) {
+        showToast("Nenhuma pulverização encontrada nesse dia.");
+        return;
+      }
+      enviarTodosBtn.disabled = true;
+      for (const g of doDia) {
+        await enviarCardPulverizacao({
+          estufasTexto: (g.estufa || "").split("/").join(", "),
+          meeirosTexto: (g.meeiro || "").split("/").join(", "),
+          dataTexto: formatExcelDate(g.data),
+          horario: formatExcelHorario(g.horario),
+          produtos: g.produtos,
+        });
+      }
+      enviarTodosBtn.disabled = false;
     });
 
     renderHistorico();
