@@ -247,9 +247,11 @@ function validateBeforeSend(fields, lookups) {
     const algumSetor = SETOR_FIELDS.some((f) => Number(fields[f]) > 0);
     if (!algumSetor) return "Informe qtde por setor";
   } else if (bloco === "Pulverizacao") {
-    if (Number(fields["Dosagem"]) <= 0) return "Dosagem inválida";
+    // `<= 0` deixava passar NaN sem avisar (qualquer comparação com NaN é
+    // sempre false) — corrigido pra exigir explicitamente um número > 0.
+    if (!(Number(fields["Dosagem"]) > 0)) return "Dosagem inválida";
   } else {
-    if (Number(fields["Quantidade"]) <= 0) return "Quantidade inválida";
+    if (!(Number(fields["Quantidade"]) > 0)) return "Quantidade inválida";
   }
 
   if (!lookups) return null;

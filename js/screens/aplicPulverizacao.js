@@ -82,7 +82,6 @@ async function gerarCardPulverizacaoPng(dados) {
   const colDosagem = 130;
   const altCabecalho = 40;
   const altLinhaBase = 42;
-  const altAlerta = 72;
   const raio = 22;
   const alturaLinhaTexto = 17;
   const maxLinhasProduto = 2;
@@ -112,6 +111,15 @@ async function gerarCardPulverizacaoPng(dados) {
   const linhasPorProduto = dados.produtos.map((p) => quebrarTextoCanvas(medCtx, p.nome, larguraProdutoDisponivel, maxLinhasProduto));
   const alturasLinha = linhasPorProduto.map((linhas) => Math.max(altLinhaBase, linhas.length * alturaLinhaTexto + 18));
   const alturaTabelaLinhas = alturasLinha.reduce((soma, h) => soma + h, 0);
+
+  // Observação livre (opcional) — vai como alerta(s) extra, em MAIÚSCULAS,
+  // dentro da mesma faixa terracota, depois dos dois alertas fixos. Pedido
+  // do usuário em 10/10/2026: um campo pra escrever algo antes de salvar e
+  // isso compor o final do card junto com os outros alertas.
+  medCtx.font = `700 12.5px ${fonte}`;
+  const textoObs = dados.observacao ? String(dados.observacao).trim().toUpperCase() : "";
+  const linhasObs = textoObs ? quebrarTextoCanvas(medCtx, textoObs, largura - 32, 3) : [];
+  const altAlerta = linhasObs.length ? 70 + linhasObs.length * 16 + 10 : 72;
 
   const altura = altHeader + altCabecalho + alturaTabelaLinhas + altAlerta;
 
@@ -191,15 +199,27 @@ async function gerarCardPulverizacaoPng(dados) {
   });
 
   // Faixa de alerta — chamativa de propósito (fundo terracota, texto branco
-  // grande, duas linhas): texto exato pedido pelo usuário em 10/10/2026.
+  // grande): texto fixo (horário + risco de fito) pedido pelo usuário em
+  // 10/10/2026, mais a observação livre (opcional, em MAIÚSCULAS) logo
+  // abaixo quando a pessoa escreveu alguma — pedido também em 10/10/2026.
   ctx.fillStyle = "#C9603D";
   ctx.fillRect(0, y, largura, altAlerta);
   ctx.fillStyle = "#FFFFFF";
   ctx.textAlign = "center";
+  const yFixo = linhasObs.length ? y + 24 : y + altAlerta / 2 - 13;
+  const yFixo2 = linhasObs.length ? y + 50 : y + altAlerta / 2 + 13;
   ctx.font = `700 16px ${fonte}`;
-  ctx.fillText(`PULVERIZAR ANTES DAS ${dados.horario || "—"}`, largura / 2, y + altAlerta / 2 - 13);
+  ctx.fillText(`PULVERIZAR ANTES DAS ${dados.horario || "—"}`, largura / 2, yFixo);
   ctx.font = `700 13px ${fonte}`;
-  ctx.fillText("⚠️ ALERTA - RISCO DE FITO NA PLANTA", largura / 2, y + altAlerta / 2 + 13);
+  ctx.fillText("⚠️ ALERTA - RISCO DE FITO NA PLANTA", largura / 2, yFixo2);
+  if (linhasObs.length) {
+    ctx.font = `700 12.5px ${fonte}`;
+    let yObs = y + 70;
+    linhasObs.forEach((linha) => {
+      ctx.fillText(linha, largura / 2, yObs);
+      yObs += 16;
+    });
+  }
 
   ctx.restore();
 
@@ -238,6 +258,9 @@ const ScreenAplic = {
 
         <label>⏱️ Horário limite</label>
         <input type="time" id="pulv-horario" required />
+
+        <label>📝 Observação (opcional)</label>
+        <textarea id="pulv-observacao" rows="2" placeholder="Informação extra pro card — vai no final, junto com os alertas, em maiúsculas"></textarea>
 
         <button type="button" id="pulv-salvar" class="btn btn-primary btn-lg">Salvar lançamento</button>
       </div>
@@ -367,9 +390,18 @@ const ScreenAplic = {
             p.dosagemCadastro = opcao ? opcao.dosagemCadastro : 0;
             estoqueEl.textContent = opcao ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}` : "";
             const totalCadastro = calcularTotalCaldaLitros(p.estoque, p.dosagemCadastro);
-            caldaCadastroEl.textContent = opcao
-              ? `🧪 Dosagem cadastrada: ${formatNumero(p.dosagemCadastro)} · 💧 Total Calda em LT: ${formatNumero(totalCadastro)} L`
-              : "";
+            // Quando o produto não tem "Dosagem ML/20LT" preenchida no
+            // cadastro (Tabela613), mostrar isso de forma clara em vez de
+            // simplesmente exibir "0" — confunde pensar que é um bug do app
+            // quando na verdade é o cadastro que está incompleto; a pessoa
+            // ainda consegue informar a dosagem manualmente logo abaixo.
+            if (!opcao) {
+              caldaCadastroEl.textContent = "";
+            } else if (p.dosagemCadastro > 0) {
+              caldaCadastroEl.textContent = `🧪 Dosagem cadastrada: ${formatNumero(p.dosagemCadastro)} · 💧 Total Calda em LT: ${formatNumero(totalCadastro)} L`;
+            } else {
+              caldaCadastroEl.textContent = "⚠️ Esse produto não tem Dosagem cadastrada — informe manualmente abaixo.";
+            }
             if (!opcao) {
               dosagemManualInput.value = "";
             } else if (opcao.value !== produtoAnterior) {
@@ -398,6 +430,7 @@ const ScreenAplic = {
     });
 
     const horarioInput = container.querySelector("#pulv-horario");
+    const observacaoInput = container.querySelector("#pulv-observacao");
 
     // --- Salvar + gerar card --------------------------------------------------
     const salvarBtn = container.querySelector("#pulv-salvar");
@@ -468,6 +501,11 @@ const ScreenAplic = {
       const dadosCard = {
         estufasList: estufasSelecionadas.slice(),
         meeirosList: meeirosSelecionados.slice(),
+        // Observação livre (opcional) — não existe coluna pra isso na tabela
+        // Pulverizacao, então só vai pro card desse envio na hora; reenviar
+        // esse mesmo lançamento depois pelo histórico não traz essa
+        // observação de volta (ver nota no arquivo).
+        observacao: observacaoInput.value.trim(),
         dataTexto: formatDataISOparaBR(data),
         horario,
         produtos: produtosValidos.map((p) => ({ nome: p.produto, dosagem: p.dosagemManual })),
