@@ -151,6 +151,15 @@ async function gerarCardPulverizacaoPng(dados) {
   const linhasObs = textoObs ? quebrarTextoCanvas(medCtx, textoObs, largura - 32, 3) : [];
   const altAlerta = linhasObs.length ? 70 + linhasObs.length * 16 + 10 : 72;
 
+  // Texto fixo da 1ª linha do alerta — pedido do usuário em 13/10/2026: até a
+  // v27 era sempre "INICIAR A PULVERIZAÇÃO ANTES DAS {horário}"; agora troca
+  // pra "...APÓS AS {horário}" quando o horário informado é depois das 11:59
+  // (comparação textual funciona porque "HH:MM" do <input type="time"> já
+  // vem com zero à esquerda e 24h — "12:00" > "11:59" como string também).
+  const textoAlertaHorario = dados.horario && dados.horario > "11:59"
+    ? `INICIAR A PULVERIZAÇÃO APÓS AS ${dados.horario}`
+    : `INICIAR A PULVERIZAÇÃO ANTES DAS ${dados.horario || "—"}`;
+
   const altura = altHeader + altCabecalho + alturaTabelaLinhas + altAlerta;
 
   const canvas = document.createElement("canvas");
@@ -239,7 +248,7 @@ async function gerarCardPulverizacaoPng(dados) {
   const yFixo = linhasObs.length ? y + 24 : y + altAlerta / 2 - 13;
   const yFixo2 = linhasObs.length ? y + 50 : y + altAlerta / 2 + 13;
   ctx.font = `700 16px ${fonte}`;
-  ctx.fillText(`INICIAR A PULVERIZAÇÃO ANTES DAS ${dados.horario || "—"}`, largura / 2, yFixo);
+  ctx.fillText(textoAlertaHorario, largura / 2, yFixo);
   ctx.font = `700 13px ${fonte}`;
   ctx.fillText("⚠️ ALERTA - RISCO DE FITO NA PLANTA", largura / 2, yFixo2);
   if (linhasObs.length) {
