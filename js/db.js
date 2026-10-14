@@ -169,7 +169,27 @@ async function queueAll() {
 
 async function queuePending() {
   const all = await queueAll();
-  return all.filter((i) => i.status === "pendente" || i.status === "erro");
+  // `queueAll()` devolve mais recente primeiro (bom pra tela Fila, que lista
+  // assim). Mas `syncQueueOnce()` (sync.js) usa esse retorno pra decidir em
+  // que ORDEM grava cada item na planilha — reaproveitar a ordem decrescente
+  // fazia a sincronização gravar do mais novo pro mais antigo (invertido!).
+  // Na prática isso fazia, por exemplo, a lista de Produtos de um lançamento
+  // de Pulverização (várias linhas, uma por produto, mesma Data/Estufa/
+  // Meeiro/Horário) sair na planilha em ordem CONTRÁRIA à digitada no
+  // formulário — e por tabela essa é a ordem que o card de WhatsApp lê de
+  // volta no histórico (bug relatado pelo usuário em 14/10/2026). Reordena
+  // aqui pra ASCENDENTE (mais antigo primeiro = ordem real de criação) antes
+  // de devolver — só afeta quem sincroniza (sync.js); a tela Fila continua
+  // usando `queueAll()` direto, sem passar por aqui.
+  return all
+    .filter((i) => i.status === "pendente" || i.status === "erro")
+    .sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt > b.createdAt ? 1 : -1;
+      // Desempate pra itens criados no mesmo milissegundo (loop rápido, ex.:
+      // vários produtos de uma Pulverização): localId começa com Date.now(),
+      // então comparar como string mantém a ordem real de criação.
+      return a.localId > b.localId ? 1 : -1;
+    });
 }
 
 // Se a página fechar/recarregar no meio de um envio, o item fica preso em
