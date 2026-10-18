@@ -154,8 +154,18 @@ html, body {
    partir de um layout de avaliação com 2 opções) — substitui o clima/local
    que ficavam no canto direito (removidos: a tela Início já tem sua própria
    previsão completa logo abaixo, então era informação duplicada). */
-.topbar-main { display: flex; align-items: center; gap: 12px; }
-.topbar-logo { width: 48px; height: 48px; flex-shrink: 0; background: #fff; border-radius: 12px; padding: 5px; object-fit: contain; }
+/* v34: layout EMPILHADO (logo numa linha só, info+saudação numa linha
+   embaixo) em vez de lado a lado — a versão lado a lado com a logo completa
+   (ícone + "Divagro" + frase, 64px de altura) quebrava "Bom dia, Márcio" e
+   até a data em telas estreitas de celular (360-390px), por falta de espaço
+   horizontal. Testado em 360/390/430px antes de confirmar com o usuário. */
+.topbar-main { display: flex; flex-direction: column; gap: 10px; }
+/* v34: trocada pela versão horizontal completa (ícone + "Divagro" + frase
+   "Do plantio à colheita, tudo em um só lugar!") — avaliada em 3 rodadas de
+   preview com o usuário (tamanho do ícone sozinho → com/sem frase → fonte da
+   frase aumentada → altura final 64px) antes de entrar na v34. */
+.topbar-logo { height: 64px; width: auto; display: block; background: #fff; border-radius: 10px; padding: 7px 10px; object-fit: contain; }
+.topbar-row2 { display: flex; align-items: flex-start; gap: 12px; }
 .topbar-info { min-width: 0; flex: 1 1 auto; }
 .topbar-logout {
   display: block;

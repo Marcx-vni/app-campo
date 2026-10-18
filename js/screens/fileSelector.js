@@ -10,7 +10,14 @@
 // Caminho exato conhecido do arquivo (mais confiável que a busca por nome,
 // que depende de um índice que pode demorar a atualizar). Se o arquivo for
 // movido, a busca abaixo continua funcionando como alternativa manual.
-const CAMINHO_CONHECIDO = "Power BI/Controle Sitio 2026.xlsm";
+//
+// Corrigido em 18/10/2026: o caminho estava desatualizado — não tinha a pasta
+// "Área de Trabalho" na frente. Em quem já tinha o arquivo salvo no aparelho
+// (localStorage) isso nunca apareceu, porque o app nem tenta esse caminho
+// quando já existe uma seleção salva (ver `bootApp()`, `js/app.js`); só ficou
+// visível num aparelho/navegador novo (sem nada salvo ainda), caindo sempre
+// na busca manual por nome — o usuário reportou com print dessa tela.
+const CAMINHO_CONHECIDO = "Área de Trabalho/Power BI/Controle Sitio 2026.xlsm";
 
 const ScreenFileSelector = {
   async render(container, onSelected) {
