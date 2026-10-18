@@ -150,11 +150,17 @@ html, body {
   color: white;
   flex-shrink: 0;
 }
-.topbar-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.topbar-info { min-width: 0; }
+/* Logo no cabeçalho (v33, Opção B escolhida pelo usuário em 18/10/2026, a
+   partir de um layout de avaliação com 2 opções) — substitui o clima/local
+   que ficavam no canto direito (removidos: a tela Início já tem sua própria
+   previsão completa logo abaixo, então era informação duplicada). */
+.topbar-main { display: flex; align-items: center; gap: 12px; }
+.topbar-logo { width: 48px; height: 48px; flex-shrink: 0; background: #fff; border-radius: 12px; padding: 5px; object-fit: contain; }
+.topbar-info { min-width: 0; flex: 1 1 auto; }
 .topbar-logout {
   display: block;
-  margin: 8px 0 0 auto;
+  margin: 0 0 0 auto;
+  align-self: center;
   font-size: 17px;
   line-height: 1;
   opacity: 0.75;
@@ -171,22 +177,6 @@ html, body {
   color: rgba(255,255,255,0.72);
   margin-top: 3px;
   cursor: pointer;
-}
-.topbar-clima { flex-shrink: 0; text-align: right; }
-.topbar-clima-topo {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 5px;
-  font-size: 19px;
-  font-weight: 600;
-}
-.topbar-clima-topo span:first-child { font-size: 20px; font-weight: 400; }
-.topbar-clima-cidade {
-  font-size: 11.5px;
-  color: rgba(255,255,255,0.72);
-  margin-top: 2px;
-  max-width: 150px;
 }
 .topbar-status { display: flex; align-items: center; gap: 8px; }
 .app-version {

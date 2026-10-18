@@ -10,7 +10,7 @@
 // uma versão nova do Service Worker e buscar tudo de novo — se só os outros
 // arquivos (js/*.js) mudarem e este número não mudar, o navegador pode
 // continuar servindo os arquivos antigos do cache indefinidamente.
-const CACHE_NAME = "app-campo-shell-v32";
+const CACHE_NAME = "app-campo-shell-v33";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -38,6 +38,7 @@ const SHELL_FILES = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/logo-divagro.webp",
+  "./icons/icon-divagro.webp",
 ];
 
 self.addEventListener("install", (event) => {

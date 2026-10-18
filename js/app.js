@@ -161,30 +161,17 @@ function iconeClima(codigo) {
   return "⛅";
 }
 
-// Busca a temperatura/condição atual (Open-Meteo — API pública, sem chave).
-// Falha silenciosa: clima é só um enfeite do cabeçalho, não pode travar nem
-// poluir o app se a API estiver fora do ar.
-async function atualizarClima() {
-  try {
-    const url =
-      `https://api.open-meteo.com/v1/forecast?latitude=${CLIMA_LATITUDE}&longitude=${CLIMA_LONGITUDE}` +
-      `&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const data = await res.json();
-    const temp = data?.current?.temperature_2m;
-    const codigo = data?.current?.weather_code;
-    if (temp === undefined || temp === null) return;
-    document.getElementById("clima-temp").textContent = `${Math.round(temp)}°C`;
-    document.getElementById("clima-icone").textContent = iconeClima(codigo);
-  } catch (e) {
-    console.warn("Falha ao buscar previsão do tempo (não crítico, segue sem clima):", e);
-  }
-}
+// Até a v32 existia aqui uma `atualizarClima()` que buscava o clima atual só
+// pra preencher o canto direito do cabeçalho (#clima-temp/#clima-icone). Na
+// v33 esses elementos saíram do cabeçalho (lugar da logo, ver index.html) —
+// removida também essa busca (ficaria chamando `getElementById` em elementos
+// que não existem mais, e a tela Início já tem sua PRÓPRIA busca de previsão
+// completa, independente — `carregarPrevisaoHome()`/`#previsao-card` em
+// home.js, que continua reaproveitando `CLIMA_LATITUDE`/`CLIMA_LONGITUDE`/
+// `iconeClima()` daqui, por isso essas três coisas continuam neste arquivo).
 
 async function bootApp() {
   atualizarSaudacaoData();
-  atualizarClima(); // não bloqueia o boot — se falhar, fica só sem o clima
   document.getElementById("screen-login").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
   atualizarLabelArquivo();
