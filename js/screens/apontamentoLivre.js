@@ -69,14 +69,16 @@ const ScreenApontamentoLivre = {
     // Na Venda, a lista de produtos vem da aba "Cadastro de Venda" (coluna "Tipo"),
     // não do cadastro geral de produtos usado em Uso/Ferti/Compra. A Tabela613
     // tem ~400 itens — vira uma caixa de busca em vez de <select> gigante.
-    // Em Aplicação (Uso), só entra produto com saldo em estoque — não faz
-    // sentido nem deixar escolher algo zerado (a validação já bloqueia o
-    // envio, mas nem aparecer na busca evita a pessoa perder tempo tentando).
+    // Em Aplicação (Uso) e, desde 18/10/2026, também em Fertirrigação (Ferti),
+    // só entra produto com saldo em estoque — não faz sentido nem deixar
+    // escolher algo zerado (a validação já bloqueia o envio, mas nem aparecer
+    // na busca evita a pessoa perder tempo tentando).
+    const produtoComEstoqueObrigatorio = this.bloco === "Uso" || this.bloco === "Ferti";
     const produtoOpcoes =
       this.bloco === "Venda"
         ? (lookups.produtosVenda || []).filter((p) => p["Tipo"]).map((p) => ({ value: p["Tipo"], label: p["Tipo"] }))
         : lookups.produtos
-            .filter((p) => p["Produto"] && (this.bloco !== "Uso" || Number(p["Estoque"]) > 0))
+            .filter((p) => p["Produto"] && (!produtoComEstoqueObrigatorio || Number(p["Estoque"]) > 0))
             // saldo/unidade viajam junto com a opção (não aparecem no texto do
             // combobox) só pra Aplicação mostrar o estoque disponível assim
             // que a pessoa escolhe o produto, sem precisar ir na outra tela.

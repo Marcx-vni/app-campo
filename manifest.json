@@ -1,6 +1,6 @@
 {
-  "name": "App de Campo — Controle Sitio EPI",
-  "short_name": "App Campo",
+  "name": "Divagro — Controle Sitio EPI",
+  "short_name": "Divagro",
   "description": "Lançamento de apontamentos de campo integrado ao Controle Sitio EPI 2026",
   "start_url": "./",
   "scope": "./",

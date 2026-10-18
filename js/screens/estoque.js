@@ -407,7 +407,7 @@ async function gerarInventarioPdf(itens, { unidadeValida, formatNumeroEstoque })
   doc.setFontSize(8);
   doc.setTextColor(...COR_RODAPE);
   if (y + 6 > bottomLimit) novaPagina();
-  doc.text("App Campo — Peterfrut", margin, y);
+  doc.text("Divagro — Peterfrut", margin, y);
 
   return doc.output("blob");
 }
