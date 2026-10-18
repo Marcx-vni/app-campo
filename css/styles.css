@@ -36,25 +36,87 @@ html, body {
 
 .hidden { display: none !important; }
 
-/* --- Login --- */
+/* --- Login — modelo em 2 painéis (pedido do usuário, 18/10/2026): logo em
+   fundo branco de um lado, saudação + entrada em fundo verde escuro do outro.
+   Empilha em telas estreitas (celular — a maioria do uso real é em campo);
+   vira lado-a-lado só a partir de 860px (telas largas/desktop). */
+:root { --dourado: #D8B35A; --dourado-escuro: #1F1708; }
 #screen-login {
-  height: 100vh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 860px) {
+  #screen-login { flex-direction: row; }
+}
+
+.login-logo-panel {
+  background: var(--card-bg);
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--verde), var(--verde-medio));
+  padding: 36px 24px;
 }
-.login-box {
-  background: var(--card-bg);
-  padding: 32px 28px;
-  border-radius: 16px;
-  text-align: center;
-  width: min(320px, 90vw);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+@media (min-width: 860px) {
+  .login-logo-panel { flex: 1 1 50%; padding: 48px; }
 }
-.login-box h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+.login-logo-img { width: min(240px, 60vw); height: auto; display: block; }
+@media (min-width: 860px) {
+  .login-logo-img { width: min(380px, 30vw); }
+}
+
+.login-form-panel {
+  flex: 1 1 auto;
+  background: linear-gradient(160deg, var(--verde-dark), var(--verde));
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 28px 56px;
+}
+@media (min-width: 860px) {
+  .login-form-panel { flex: 1 1 50%; padding: 64px; }
+}
+.login-form-inner { width: min(420px, 100%); }
+
+.login-saudacao { color: var(--dourado); font-weight: 600; font-size: 15px; margin: 0 0 14px; }
+.login-titulo { margin: 0 0 14px; font-size: clamp(26px, 6vw, 38px); font-weight: 700; line-height: 1.18; letter-spacing: -0.01em; }
+.login-subtitulo { color: rgba(255,255,255,0.78); font-size: 16px; margin: 0 0 30px; }
+.login-rodape { color: rgba(255,255,255,0.55); font-size: 13px; margin-top: 16px; }
+
+.btn-login-ms {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--dourado);
+  color: var(--dourado-escuro);
+  border: none;
+  border-radius: 999px;
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.btn-login-ms:active { filter: brightness(0.96); }
+
+/* "Logo" da Microsoft em CSS puro (4 quadradinhos coloridos) — evita carregar
+   um ícone externo só pra isso. */
+.ms-logo { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; width: 18px; height: 18px; flex: 0 0 auto; }
+.ms-logo i { display: block; border-radius: 1px; }
+.ms-logo i:nth-child(1) { background: #F35325; }
+.ms-logo i:nth-child(2) { background: #81BC06; }
+.ms-logo i:nth-child(3) { background: #05A6F0; }
+.ms-logo i:nth-child(4) { background: #FFBA08; }
+
 .muted { color: var(--muted); font-size: 14px; margin-top: 0; }
 .error-text { color: var(--red); font-size: 13px; min-height: 18px; }
+/* Fundo escuro só na tela de login — vermelho-terracota padrão não teria
+   contraste suficiente ali. */
+#screen-login .error-text { color: #FFD9CC; }
 
 /* --- Boas-vindas / sincronizando (tela entre login e app, na abertura) --- */
 #main-content .welcome-box,

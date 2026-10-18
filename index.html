@@ -21,13 +21,26 @@
 </head>
 <body>
 
-  <!-- Tela de login -->
+  <!-- Tela de login — modelo em duas colunas pedido pelo usuário em 18/10/2026
+       (print de referência: painel branco com a logo à esquerda, painel verde
+       escuro com saudação + botão de entrada à direita). Em telas estreitas
+       (celular, a maioria dos acessos em campo) as colunas empilham (ver CSS). -->
   <div id="screen-login" class="screen">
-    <div class="login-box">
-      <h1>Divagro</h1>
-      <p class="muted">Controle Sitio 2026</p>
-      <button id="btn-login" class="btn btn-primary btn-lg">Entrar com Microsoft</button>
-      <p id="login-error" class="error-text"></p>
+    <div class="login-logo-panel">
+      <img src="icons/logo-divagro.webp" alt="Divagro — do plantio à colheita, tudo em um só lugar" class="login-logo-img" />
+    </div>
+    <div class="login-form-panel">
+      <div class="login-form-inner">
+        <p id="login-saudacao" class="login-saudacao">—</p>
+        <h1 class="login-titulo">Pronto para mais um dia no campo?</h1>
+        <p class="login-subtitulo">Controle Sítio 2026</p>
+        <button id="btn-login" class="btn-login-ms">
+          <span class="ms-logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          Entrar com Microsoft
+        </button>
+        <p id="login-error" class="error-text"></p>
+        <p class="login-rodape">Use sua conta corporativa Microsoft 365.</p>
+      </div>
     </div>
   </div>
 

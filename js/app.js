@@ -261,6 +261,14 @@ document.getElementById("arquivo-atual").addEventListener("click", () => {
   }
 });
 
+// Saudação da tela de login ("Bom dia!"/"Boa tarde!"/"Boa noite!") — pedido
+// do usuário em 18/10/2026, junto com o novo layout em 2 painéis. Roda ANTES
+// do login (a tela já fica visível por padrão, sem esperar `initAuth()`),
+// então usa `saudacaoPorHorario()` direto, sem nome (ainda não tem usuário
+// logado nesse ponto).
+const loginSaudacaoEl = document.getElementById("login-saudacao");
+if (loginSaudacaoEl) loginSaudacaoEl.textContent = `${saudacaoPorHorario()}!`;
+
 (async function init() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js").catch(console.error);
