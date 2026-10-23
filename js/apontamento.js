@@ -290,6 +290,22 @@ function validateBeforeSend(fields, lookups) {
         return `${fields["Produto"]}: quantidade pedida (${totalProduto.toLocaleString("pt-BR", { maximumFractionDigits: 3 })}) é maior que o estoque disponível (${estoqueAtual.toLocaleString("pt-BR", { maximumFractionDigits: 3 })})`;
       }
     }
+    // Mesma trava do Uso, adicionada em 23/10/2026 quando o Ferti passou a
+    // aceitar vários produtos por lançamento (antes só mostrava o estoque
+    // disponível de forma informativa, sem bloquear). "Qtde." que sai do
+    // estoque num Ferti é a soma de todos os setores ÷ 1.000 (mesma conta de
+    // prepararRegistro, bloco "Ferti", `totalFerti / 1000`).
+    if (bloco === "Ferti") {
+      const estoqueAtual = Number(encontrado["Estoque"]) || 0;
+      if (estoqueAtual <= 0) {
+        return `${fields["Produto"]} está sem estoque disponível`;
+      }
+      const totalSetores = SETOR_FIELDS.reduce((soma, f) => soma + (Number(fields[f]) || 0), 0);
+      const totalProduto = totalSetores / 1000;
+      if (totalProduto > estoqueAtual) {
+        return `${fields["Produto"]}: quantidade pedida (${totalProduto.toLocaleString("pt-BR", { maximumFractionDigits: 3 })}) é maior que o estoque disponível (${estoqueAtual.toLocaleString("pt-BR", { maximumFractionDigits: 3 })})`;
+      }
+    }
   }
   if (fields["Operação"] && bloco !== "Venda" && !achar(lookups.operacoes, "Operação", fields["Operação"])) {
     return "Operação inexistente";

@@ -129,16 +129,22 @@ const ScreenApontamentoLivre = {
       // Ferti") e calcula sozinho qtde = plantas ÷ 1.000 × dosagem — igual a
       // conta feita na planilha. D.A.T também é sugerido automaticamente
       // (data do lançamento − data de plantio do plantio ativo), mas continua
-      // editável caso precise corrigir.
+      // editável caso precise corrigir — é um só por lançamento, porque depende
+      // só de Estufa+Data, não do produto.
+      //
+      // Desde 23/10/2026 (pedido do usuário): assim como a Aplic. (Pulverização),
+      // dá pra lançar VÁRIOS produtos de uma vez na mesma Estufa/Meeiro/Data —
+      // cada produto tem sua própria dosagem e sua própria "Quantidade por setor",
+      // mas todos compartilham Estufa/Meeiro/Data/D.A.T. Diferente da Aplic., cada
+      // produto aqui vira DOIS lançamentos na fila (Registro Ferti + baixa de
+      // estoque no Registro de Inventario), não só um log — ver prepararRegistro
+      // em js/apontamento.js e o loop no handler de submit logo abaixo.
       camposEspecificos = `
-        <label>🧪 Dosagem (g ou mL) por 1.000 plantas</label>
-        <input type="number" step="0.01" id="f-dosagem-ferti" />
         <label>⏱️ D.A.T (dias após plantio)</label>
         <input type="number" id="f-dat" placeholder="Calculado automaticamente" />
-        <div class="section-title">Quantidade por setor (calculada automaticamente)</div>
-        <div id="ferti-setores-calc" class="ferti-setores-calc">
-          <div class="empty-state">Escolha a estufa pra calcular.</div>
-        </div>
+        <div class="section-title">Produtos</div>
+        <div id="ferti-produtos-list"></div>
+        <button type="button" id="ferti-add-produto" class="btn btn-secondary btn-sm">+ Adicionar produto</button>
       `;
     } else if (this.bloco === "Venda") {
       camposEspecificos = `
@@ -200,9 +206,11 @@ const ScreenApontamentoLivre = {
       ${
         this.bloco === "Financeiro"
           ? `<label>🧴 Produto</label><input type="text" id="f-produto-texto" placeholder="Descreva o produto/serviço" required />`
+          : this.bloco === "Ferti"
+          ? "" /* Produto fica na lista dinâmica, dentro de "camposEspecificos" abaixo */
           : `<label>🧴 Produto</label>
              <div id="f-produto-combo"></div>
-             ${this.bloco === "Uso" || this.bloco === "Ferti" ? `<div id="produto-saldo-info" class="produto-saldo-info"></div>` : ""}`
+             ${this.bloco === "Uso" ? `<div id="produto-saldo-info" class="produto-saldo-info"></div>` : ""}`
       }
 
       ${camposEspecificos}
@@ -316,41 +324,123 @@ const ScreenApontamentoLivre = {
       return match ? match["Meeiro"] : null;
     };
 
-    // Recalcula a lista "Quantidade por setor" da Fertirrigação toda vez que
-    // a Estufa ou a Dosagem mudam — só existe quando bloco === "Ferti".
-    const atualizarCalculoFerti = () => {
-      const calcEl = form.querySelector("#ferti-setores-calc");
-      if (!calcEl) return;
-      const estufaNome = resolverEstufaNome();
-      if (!estufaNome) {
-        calcEl.innerHTML = `<div class="empty-state">Escolha a estufa pra calcular.</div>`;
-        return;
-      }
-      const meeiroNome = resolverMeeiroNome();
-      const setores = setoresDoPlantioAtivo(lookups, estufaNome, meeiroNome);
-      if (setores.length === 0) {
-        calcEl.innerHTML = `<div class="empty-state">Nenhum setor com plantio ativo encontrado pra ${escapeHtml(
-          estufaNome
-        )}${meeiroNome ? ` / ${escapeHtml(meeiroNome)}` : ""}.</div>`;
-        return;
-      }
-      const dosagem = Number(form.querySelector("#f-dosagem-ferti")?.value) || 0;
-      // Arredondado pro múltiplo de 50 gramas aqui também, pra bater com o que
-      // calcularSetoresFerti vai gravar de fato — senão a prévia mostraria
-      // um número e a planilha gravaria outro.
-      const qtds = setores.map((s) => arredondarGramasFerti((s.plantas / 1000) * dosagem));
-      const linhas = setores
-        .map(
-          (s, i) =>
-            `<div class="card-row"><span>Setor ${s.setor} · ${formatNumero(s.plantas)} plantas</span><span>${dosagem > 0 ? formatNumero(qtds[i]) : "—"}</span></div>`
-        )
-        .join("");
-      const total = qtds.reduce((soma, q) => soma + q, 0);
-      calcEl.innerHTML = `
-        ${linhas}
-        <div class="card-row ferti-total-row"><span>Total</span><span>${dosagem > 0 ? `${formatNumero(total)} (${formatNumero(total / 1000)} no estoque)` : "—"}</span></div>
-      `;
-    };
+    // --- Lista dinâmica de produtos do bloco Ferti (23/10/2026) --------------
+    // Mesmo padrão da tela Aplic. (js/screens/aplicPulverizacao.js): um
+    // "+ Adicionar produto" que cria mais uma linha, cada uma com seu próprio
+    // combobox de Produto + Dosagem + prévia de "Quantidade por setor". Estufa/
+    // Meeiro/Data são compartilhados (um só, no topo do formulário) — só a
+    // dosagem e o resultado por setor variam por produto.
+    let produtosStateFerti = [];
+    let atualizarTodosCalculosFerti = () => {};
+    if (this.bloco === "Ferti") {
+      const produtosList = form.querySelector("#ferti-produtos-list");
+      let proximoIdFerti = 1;
+      produtosStateFerti = [{ id: proximoIdFerti++, produto: null, estoque: 0, unidade: "", dosagem: null }];
+      let atualizarCalcFnsFerti = [];
+
+      const renderProdutosFerti = () => {
+        produtosList.innerHTML = produtosStateFerti
+          .map(
+            (p, idx) => `
+          <div class="pulv-produto-row" data-idx="${idx}">
+            <div class="pulv-produto-row-topo">
+              <label>🧴 Produto ${idx + 1}</label>
+              ${produtosStateFerti.length > 1 ? `<span class="pulv-remover-produto" data-idx="${idx}">Remover</span>` : ""}
+            </div>
+            <div class="ferti-produto-combo" data-idx="${idx}"></div>
+            <div class="produto-saldo-info" data-estoque="${idx}"></div>
+            <label>🧪 Dosagem (g ou mL) por 1.000 plantas</label>
+            <input type="number" step="0.01" class="ferti-dosagem-manual" data-idx="${idx}" />
+            <div class="ferti-setores-calc" data-calc="${idx}">
+              <div class="empty-state">Escolha a estufa pra calcular.</div>
+            </div>
+          </div>`
+          )
+          .join("");
+
+        atualizarCalcFnsFerti = [];
+        produtosStateFerti.forEach((p, idx) => {
+          const comboEl = produtosList.querySelector(`.ferti-produto-combo[data-idx="${idx}"]`);
+          const estoqueEl = produtosList.querySelector(`[data-estoque="${idx}"]`);
+          const dosagemInput = produtosList.querySelector(`.ferti-dosagem-manual[data-idx="${idx}"]`);
+          const calcEl = produtosList.querySelector(`[data-calc="${idx}"]`);
+
+          // Semeia a dosagem já digitada ANTES de criar o combobox — o
+          // re-render inteiro (obrigatório pra add/remove) recria todas as
+          // linhas, e sem isso o valor já digitado nessa linha se perderia.
+          dosagemInput.value = p.dosagem ?? "";
+
+          const atualizarCalcLinha = () => {
+            const dosagem = dosagemInput.value === "" ? 0 : Number(dosagemInput.value) || 0;
+            p.dosagem = dosagemInput.value === "" ? null : dosagem;
+            const estufaNome = resolverEstufaNome();
+            if (!estufaNome) {
+              calcEl.innerHTML = `<div class="empty-state">Escolha a estufa pra calcular.</div>`;
+              return;
+            }
+            const meeiroNome = resolverMeeiroNome();
+            const setores = setoresDoPlantioAtivo(lookups, estufaNome, meeiroNome);
+            if (setores.length === 0) {
+              calcEl.innerHTML = `<div class="empty-state">Nenhum setor com plantio ativo encontrado pra ${escapeHtml(
+                estufaNome
+              )}${meeiroNome ? ` / ${escapeHtml(meeiroNome)}` : ""}.</div>`;
+              return;
+            }
+            // Arredondado pro múltiplo de 10 gramas aqui também, pra bater com
+            // o que calcularSetoresFerti vai gravar de fato — senão a prévia
+            // mostraria um número e a planilha gravaria outro.
+            const qtds = setores.map((s) => arredondarGramasFerti((s.plantas / 1000) * dosagem));
+            const linhas = setores
+              .map(
+                (s, i) =>
+                  `<div class="card-row"><span>Setor ${s.setor} · ${formatNumero(s.plantas)} plantas</span><span>${dosagem > 0 ? formatNumero(qtds[i]) : "—"}</span></div>`
+              )
+              .join("");
+            const total = qtds.reduce((soma, q) => soma + q, 0);
+            calcEl.innerHTML = `
+              ${linhas}
+              <div class="card-row ferti-total-row"><span>Total</span><span>${dosagem > 0 ? `${formatNumero(total)} (${formatNumero(total / 1000)} no estoque)` : "—"}</span></div>
+            `;
+          };
+          atualizarCalcFnsFerti.push(atualizarCalcLinha);
+
+          criarComboBusca(comboEl, produtoOpcoes, {
+            valorInicial: p.produto || "",
+            placeholder: "Buscar produto...",
+            onChange: (opcao) => {
+              p.produto = opcao ? opcao.value : null;
+              p.estoque = opcao ? opcao.estoque : 0;
+              p.unidade = opcao ? opcao.unidade : "";
+              estoqueEl.textContent = opcao
+                ? `📦 Estoque disponível: ${formatNumero(opcao.estoque)}${opcao.unidade ? " " + opcao.unidade : ""}`
+                : "";
+              atualizarCalcLinha();
+            },
+          });
+
+          dosagemInput.addEventListener("input", atualizarCalcLinha);
+          atualizarCalcLinha();
+        });
+
+        produtosList.querySelectorAll(".pulv-remover-produto").forEach((el) => {
+          el.addEventListener("click", () => {
+            produtosStateFerti.splice(Number(el.dataset.idx), 1);
+            renderProdutosFerti();
+          });
+        });
+      };
+      renderProdutosFerti();
+
+      form.querySelector("#ferti-add-produto").addEventListener("click", () => {
+        produtosStateFerti.push({ id: proximoIdFerti++, produto: null, estoque: 0, unidade: "", dosagem: null });
+        renderProdutosFerti();
+      });
+
+      // Chamada quando Estufa ou Meeiro mudam — recalcula a prévia de TODAS as
+      // linhas de produto de uma vez (cada uma usa sua própria dosagem, mas
+      // todas dependem da mesma Estufa/Meeiro pros setores/plantas).
+      atualizarTodosCalculosFerti = () => atualizarCalcFnsFerti.forEach((fn) => fn());
+    }
 
     // D.A.T sugerido: recalcula sozinho toda vez que estufa/data mudam, mas
     // pára de mexer assim que a pessoa digitar algo nele à mão (datEditadoPeloUsuario).
@@ -389,7 +479,7 @@ const ScreenApontamentoLivre = {
         // conta (cada meeiro tem os seus, mesmo dividindo a mesma estufa) —
         // sem isso o cálculo ficava com os setores de quem estava selecionado
         // antes, ou nem recalculava ao trocar só o meeiro.
-        onChange: this.bloco === "Ferti" ? () => atualizarCalculoFerti() : undefined,
+        onChange: this.bloco === "Ferti" ? () => atualizarTodosCalculosFerti() : undefined,
       });
       estufaCombo = criarComboBusca(form.querySelector("#f-estufa-combo"), estufaOpcoes, {
         placeholder: "Buscar estufa...",
@@ -397,7 +487,7 @@ const ScreenApontamentoLivre = {
         onChange:
           this.bloco === "Ferti"
             ? () => {
-                atualizarCalculoFerti();
+                atualizarTodosCalculosFerti();
                 sugerirDAT();
               }
             : undefined,
@@ -412,7 +502,6 @@ const ScreenApontamentoLivre = {
     }
 
     if (this.bloco === "Ferti") {
-      form.querySelector("#f-dosagem-ferti").addEventListener("input", atualizarCalculoFerti);
       form.querySelector("#f-data").addEventListener("change", sugerirDAT);
       form.querySelector("#f-dat").addEventListener("input", () => {
         datEditadoPeloUsuario = true;
@@ -440,6 +529,78 @@ const ScreenApontamentoLivre = {
       if (submitBtn) submitBtn.disabled = true;
 
       const bloco = this.bloco;
+
+      // --- Bloco Ferti: um ou mais produtos no mesmo lançamento (23/10/2026) ---
+      // Diferente dos outros blocos (um fields/um queueAdd), aqui cada produto
+      // da lista vira seu PRÓPRIO item de fila — cada um grava uma linha em
+      // Registro Ferti e dá sua própria baixa no Registro de Inventario (ver
+      // prepararRegistro, js/apontamento.js). Se a rede cair no meio, os itens
+      // já enfileirados ficam "pendente" e sincronizam sozinhos depois — não é
+      // tudo-ou-nada (mesmo comportamento já usado na tela Aplic.).
+      if (bloco === "Ferti") {
+        const data = form.querySelector("#f-data").value;
+        const estufaVal = estufaCombo.getValue();
+        const meeiroVal = meeiroCombo.getValue();
+        const estufaMatch = lookups.estufas.find((e) => String(e.__cod) === String(estufaVal));
+        const meeiroMatch = lookups.meeiros.find((m) => String(m.__cod) === String(meeiroVal));
+        const codigoEstufa = estufaMatch ? estufaMatch.__cod : estufaVal;
+        const codigoMeeiro = meeiroMatch ? meeiroMatch.__cod : meeiroVal;
+        const estufaNomeAtual = estufaMatch ? estufaMatch["Estufa"] : null;
+        const meeiroNomeAtual = meeiroMatch ? meeiroMatch["Meeiro"] : null;
+        const complemento = form.querySelector("#f-complemento").value;
+        const datInformado = form.querySelector("#f-dat").value;
+        const datFinal = datInformado !== "" ? Number(datInformado) : calcularDAT(lookups, estufaNomeAtual, data);
+
+        const produtosValidos = produtosStateFerti.filter((p) => p.produto && Number(p.dosagem) > 0);
+        if (produtosValidos.length === 0) {
+          showToast("Informe ao menos um produto com dosagem válida.");
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+
+        if (codigoMeeiro !== undefined && codigoMeeiro !== null && codigoMeeiro !== "") {
+          localStorage.setItem(MEEIRO_STORAGE_KEY, codigoMeeiro);
+        }
+        if (codigoEstufa !== undefined && codigoEstufa !== null && codigoEstufa !== "") {
+          localStorage.setItem(ESTUFA_STORAGE_KEY, codigoEstufa);
+        }
+
+        for (const p of produtosValidos) {
+          const fields = {
+            Bloco: "Ferti",
+            Data: data,
+            "Código Estufa": codigoEstufa,
+            "Código Meeiro": codigoMeeiro,
+            Produto: p.produto,
+            Complemento: complemento,
+            "D.A.T": datFinal,
+          };
+          // Mesma fórmula mostrada na prévia da tela (plantas do setor ÷
+          // 1.000 × dosagem) — calculada de novo aqui, não lida dos cards, pra
+          // garantir que o que é gravado é sempre a conta mais atual.
+          Object.assign(fields, calcularSetoresFerti(lookups, estufaNomeAtual, p.dosagem, meeiroNomeAtual));
+          fields["Dosagem Ferti"] = p.dosagem || null;
+
+          const erro = validateBeforeSend(fields, lookups);
+          if (erro) {
+            showToast(`Não foi possível enviar ${p.produto}: ${erro}`);
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+          }
+          await queueAdd({ fields, origemTela: "T3" });
+        }
+
+        showToast(
+          produtosValidos.length > 1
+            ? `${produtosValidos.length} produtos gravados. Sincronizando...`
+            : "Apontamento gravado. Sincronizando..."
+        );
+        this.render(container);
+        updateSyncIndicator();
+        if (navigator.onLine) syncQueueOnce().then(() => updateSyncIndicator());
+        return;
+      }
+
       const fields = { Bloco: bloco, Data: form.querySelector("#f-data").value };
 
       if (bloco !== "Compra" && bloco !== "Financeiro") {
@@ -479,19 +640,6 @@ const ScreenApontamentoLivre = {
         // no produto (Tabela613) — decisão de campo tem prioridade sobre o padrão.
         const dosagemAlterada = form.querySelector("#f-dosagem-alterada").value;
         fields["Alterar dosagem para:"] = dosagemAlterada !== "" ? Number(dosagemAlterada) : null;
-      } else if (bloco === "Ferti") {
-        const dosagem = Number(form.querySelector("#f-dosagem-ferti").value) || 0;
-        fields["Dosagem Ferti"] = dosagem || null;
-        // Mesma fórmula mostrada na tela (plantas do setor ÷ 1.000 × dosagem) —
-        // calculada de novo aqui em vez de ler os cards, pra garantir que o que
-        // é gravado é sempre a conta mais atual (estufa/dosagem podem ter
-        // mudado desde o último recálculo visual).
-        const estufaNomeAtual = lookups.estufas.find((e) => String(e.__cod) === String(fields["Código Estufa"]))?.["Estufa"];
-        const meeiroNomeAtual = lookups.meeiros.find((m) => String(m.__cod) === String(fields["Código Meeiro"]))?.["Meeiro"];
-        Object.assign(fields, calcularSetoresFerti(lookups, estufaNomeAtual, dosagem, meeiroNomeAtual));
-        const datInformado = form.querySelector("#f-dat").value;
-        fields["D.A.T"] =
-          datInformado !== "" ? Number(datInformado) : calcularDAT(lookups, estufaNomeAtual, fields["Data"]);
       } else if (bloco === "Venda") {
         fields["Operação"] = "Venda";
         fields["Quantidade"] = Number(form.querySelector("#f-quantidade").value);
