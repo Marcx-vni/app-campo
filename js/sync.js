@@ -73,7 +73,13 @@ async function sendOne(item) {
   // (limitação atual) — o erro fica visível na fila pra correção manual.
   if (ferti) await addTableRow(TABLES.registroFerti, ferti);
   if (financeiro) await addTableRow(TABLES.financeiro, financeiro);
-  if (pulverizacao) await addTableRow(TABLES.pulverizacao, pulverizacao);
+  // Pulverizacao não tem coluna de rastreio (ver pulverizacaoJaGravada,
+  // apontamento.js) — confere se essa linha exata já não foi gravada antes
+  // (reenvio por erro passageiro do Graph ou por reabrir o app no meio de um
+  // envio anterior) pra não duplicar o produto no card de WhatsApp.
+  if (pulverizacao && !(await pulverizacaoJaGravada(pulverizacao))) {
+    await addTableRow(TABLES.pulverizacao, pulverizacao);
+  }
 
   await queueUpdate(item.localId, {
     status: "enviado",

@@ -54,6 +54,35 @@ const FINANCEIRO_COMPUTED = new Set(["Data Pagamento", "Valor Pago", "Dias em At
 const REGISTRO_PULVERIZACAO_COLUMNS = ["Data", "Estufa", "Meeiro", "Produto", "Dosagem", "Horário", "Observação"];
 const REGISTRO_PULVERIZACAO_COMPUTED = new Set();
 
+// Diferente do Registro de Inventario (que tem a coluna "Complemento",
+// carregando a tag "#localId" do dispositivo — ver composeComplemento em
+// sync.js), a tabela Pulverizacao NÃO TEM essa coluna (ver colunas acima,
+// confirmadas pelo usuário) — não existe nenhuma tag pra rastrear se uma
+// gravação específica já foi feita antes. Isso deixava esse bloco exposto a
+// gravar a MESMA linha duas vezes sem nenhum jeito de perceber, em duas
+// situações reais: (1) um erro passageiro do Excel Online (429/500/502/503/
+// 504) onde o servidor já tinha processado a gravação mas a resposta
+// chegou como erro, e o app reenviava "por dentro" da mesma chamada (ver
+// graphFetch, graph.js, corrigido em 27/10/2026 pra nunca reenviar POST/
+// PATCH sozinho); (2) o app fechar/recarregar ENTRE a gravação na planilha
+// ter dado certo e o item ser marcado "enviado" na fila local — no próximo
+// carregamento, `queueDestravarEnviandoOrfaos()` (db.js) devolve esse item
+// pra "pendente" e ele é reenviado do zero. As duas causas produzem uma
+// linha idêntica (mesma dosagem, mesmo tudo) — exatamente o tipo de
+// duplicidade relatada pelo usuário em 27/10/2026 nos cards de Aplicação.
+// Correção: antes de gravar, confere se já existe uma linha com TODAS as
+// colunas idênticas (mesmo valor em cada uma) — só grava se não achar.
+async function pulverizacaoJaGravada(valoresArray) {
+  const rows = await readTable(TABLES.pulverizacao);
+  return rows.some((r) =>
+    REGISTRO_PULVERIZACAO_COLUMNS.every((col, i) => {
+      const existente = r[col] ?? null;
+      const novo = valoresArray[i] ?? null;
+      return String(existente) === String(novo);
+    })
+  );
+}
+
 function montarLinha(colunas, computadas, valores) {
   return colunas.map((col) => {
     if (computadas.has(col)) return null;

@@ -84,7 +84,19 @@ async function graphFetch(path, options = {}, _tentativa = 1) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    if (GRAPH_RETRYABLE_STATUS.has(res.status) && _tentativa < 3) {
+    // Reenviar automaticamente só é seguro pra LEITURA (GET). Pra GRAVAÇÃO
+    // (POST em /rows/add, PATCH de linha) um erro "passageiro" do Excel
+    // Online (429/500/502/503/504) pode significar que o servidor JÁ
+    // processou a gravação e só a resposta que falhou/demorou — reenviar
+    // "por dentro" dessa mesma chamada, do mesmo jeito que funcionava antes
+    // (até v35), duplicava silenciosamente a linha gravada, sem nenhum
+    // rastro na fila (erro real investigado em 27/10/2026 — ver "Erros já
+    // investigados e resolvidos"). Agora, pra escrita, o erro sempre sobe:
+    // sync.js marca o item como "erro" e tenta de novo só no próximo ciclo —
+    // e quem grava (sendOne) já confere antes se a linha não foi gravada
+    // nesse meio tempo (ver pulverizacaoJaGravada, apontamento.js).
+    const metodo = String(options.method || "GET").toUpperCase();
+    if (metodo === "GET" && GRAPH_RETRYABLE_STATUS.has(res.status) && _tentativa < 3) {
       // Backoff simples: espera um pouco mais a cada nova tentativa (1.5s, depois 3s)
       await new Promise((r) => setTimeout(r, 1500 * _tentativa));
       return graphFetch(path, options, _tentativa + 1);
