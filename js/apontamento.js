@@ -54,34 +54,50 @@ const FINANCEIRO_COMPUTED = new Set(["Data Pagamento", "Valor Pago", "Dias em At
 const REGISTRO_PULVERIZACAO_COLUMNS = ["Data", "Estufa", "Meeiro", "Produto", "Dosagem", "Horário", "Observação"];
 const REGISTRO_PULVERIZACAO_COMPUTED = new Set();
 
-// Diferente do Registro de Inventario (que tem a coluna "Complemento",
-// carregando a tag "#localId" do dispositivo — ver composeComplemento em
-// sync.js), a tabela Pulverizacao NÃO TEM essa coluna (ver colunas acima,
-// confirmadas pelo usuário) — não existe nenhuma tag pra rastrear se uma
-// gravação específica já foi feita antes. Isso deixava esse bloco exposto a
-// gravar a MESMA linha duas vezes sem nenhum jeito de perceber, em duas
-// situações reais: (1) um erro passageiro do Excel Online (429/500/502/503/
-// 504) onde o servidor já tinha processado a gravação mas a resposta
-// chegou como erro, e o app reenviava "por dentro" da mesma chamada (ver
-// graphFetch, graph.js, corrigido em 27/10/2026 pra nunca reenviar POST/
-// PATCH sozinho); (2) o app fechar/recarregar ENTRE a gravação na planilha
-// ter dado certo e o item ser marcado "enviado" na fila local — no próximo
-// carregamento, `queueDestravarEnviandoOrfaos()` (db.js) devolve esse item
-// pra "pendente" e ele é reenviado do zero. As duas causas produzem uma
-// linha idêntica (mesma dosagem, mesmo tudo) — exatamente o tipo de
-// duplicidade relatada pelo usuário em 27/10/2026 nos cards de Aplicação.
-// Correção: antes de gravar, confere se já existe uma linha com TODAS as
-// colunas idênticas (mesmo valor em cada uma) — só grava se não achar.
-async function pulverizacaoJaGravada(valoresArray) {
-  const rows = await readTable(TABLES.pulverizacao);
+// ============================================================================
+// PROTEÇÃO CONTRA GRAVAÇÃO DUPLICADA — investigada e corrigida em 27/10/2026
+// (Pulverizacao) e ampliada em 03/11/2026 depois do MESMO padrão reaparecer
+// no bloco Ferti ("Failed to fetch": a planilha recebe a linha, mas a
+// RESPOSTA nunca chega no app — sendOne() lança erro, o item fica "erro" na
+// fila, e um reenvio posterior grava tudo de novo do zero, duplicando o que
+// já tinha ido). Duas estratégias, dependendo de a tabela ter ou não uma
+// coluna pra guardar uma tag única por lançamento:
+//
+// - Registro de Inventario TEM a coluna "Complemento", que carrega a tag
+//   "#localId" do dispositivo (ver composeComplemento, sync.js) — ESSA tag é
+//   estável entre tentativas (não muda se o item for reenviado), diferente
+//   de "Gravado em"/"Seq", que são recalculados a cada chamada de
+//   prepararRegistro. `inventarioRowIndexPorTag()` procura uma linha já
+//   gravada com essa tag antes de gravar de novo.
+// - Registro Ferti, Financeiro e Pulverizacao NÃO TÊM essa coluna — não dá
+//   pra rastrear por tag. `linhaJaGravadaExata()` confere se já existe uma
+//   linha com todas as colunas idênticas (ignorando as calculadas pela
+//   própria planilha — ex. "Total" do Ferti — e, no caso do Financeiro,
+//   também "Gravado em", que vem diferente a cada tentativa).
+// ============================================================================
+
+async function inventarioRowIndexPorTag(tagUnico) {
+  const rows = await readTable(TABLES.registroInventario);
+  const encontrada = rows.find((r) => String(r["Complemento"] || "").includes(tagUnico));
+  return encontrada ? encontrada.__rowIndex : undefined; // undefined = ainda não foi gravado
+}
+
+async function linhaJaGravadaExata(tableName, colunas, colunasIgnorar, valoresArray) {
+  const rows = await readTable(tableName);
   return rows.some((r) =>
-    REGISTRO_PULVERIZACAO_COLUMNS.every((col, i) => {
+    colunas.every((col, i) => {
+      if (colunasIgnorar.has(col)) return true;
       const existente = r[col] ?? null;
       const novo = valoresArray[i] ?? null;
       return String(existente) === String(novo);
     })
   );
 }
+
+// Financeiro não tem "Complemento" (tag única) e tem "Gravado em" (volátil,
+// recalculado a cada tentativa) — soma as duas listas (calculadas pela
+// planilha + voláteis) pra ignorar na comparação de "já foi gravado".
+const FINANCEIRO_IGNORAR_NA_COMPARACAO = new Set([...FINANCEIRO_COMPUTED, "Gravado em"]);
 
 function montarLinha(colunas, computadas, valores) {
   return colunas.map((col) => {

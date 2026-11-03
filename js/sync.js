@@ -64,20 +64,37 @@ async function sendOne(item) {
   const seq = precisaSeqInventario ? await proximoSeq(TABLES.registroInventario) : null;
   const { inventario, ferti, financeiro, pulverizacao } = prepararRegistro(fields, lookups, seq, usuario);
 
-  const rowIndex = inventario ? await addTableRow(TABLES.registroInventario, inventario) : null;
+  // Proteção contra duplicar (27/10/2026, ampliada em 03/11/2026 — ver
+  // "PROTEÇÃO CONTRA GRAVAÇÃO DUPLICADA" em apontamento.js): um `addTableRow`
+  // pode já ter gravado na planilha mesmo quando ESSA chamada termina com
+  // erro (ex.: "Failed to fetch" — a rede caiu bem na hora de ler a RESPOSTA,
+  // já depois do servidor ter processado a gravação). Quando `sendOne` é
+  // chamado de novo pro mesmo item (reenvio automático ou manual), cada
+  // gravação confere antes se já foi feita, pra não duplicar a linha.
+  const tagUnico = `#${item.localId}`;
+  let rowIndex;
+  if (inventario) {
+    const existente = await inventarioRowIndexPorTag(tagUnico);
+    rowIndex = existente !== undefined ? existente : await addTableRow(TABLES.registroInventario, inventario);
+  } else {
+    rowIndex = null;
+  }
 
   // Ferti e Compra também gravam num segundo lugar (Registro Ferti / Financeiro);
   // os blocos Financeiro e Pulverizacao gravam SÓ no destino próprio (sem linha
   // correspondente no Inventario). Se essa segunda gravação falhar, a linha do
   // Inventario já gravada (quando existe) NÃO é desfeita automaticamente
   // (limitação atual) — o erro fica visível na fila pra correção manual.
-  if (ferti) await addTableRow(TABLES.registroFerti, ferti);
-  if (financeiro) await addTableRow(TABLES.financeiro, financeiro);
-  // Pulverizacao não tem coluna de rastreio (ver pulverizacaoJaGravada,
-  // apontamento.js) — confere se essa linha exata já não foi gravada antes
-  // (reenvio por erro passageiro do Graph ou por reabrir o app no meio de um
-  // envio anterior) pra não duplicar o produto no card de WhatsApp.
-  if (pulverizacao && !(await pulverizacaoJaGravada(pulverizacao))) {
+  if (ferti && !(await linhaJaGravadaExata(TABLES.registroFerti, REGISTRO_FERTI_COLUMNS, REGISTRO_FERTI_COMPUTED, ferti))) {
+    await addTableRow(TABLES.registroFerti, ferti);
+  }
+  if (
+    financeiro &&
+    !(await linhaJaGravadaExata(TABLES.financeiro, FINANCEIRO_COLUMNS, FINANCEIRO_IGNORAR_NA_COMPARACAO, financeiro))
+  ) {
+    await addTableRow(TABLES.financeiro, financeiro);
+  }
+  if (pulverizacao && !(await linhaJaGravadaExata(TABLES.pulverizacao, REGISTRO_PULVERIZACAO_COLUMNS, REGISTRO_PULVERIZACAO_COMPUTED, pulverizacao))) {
     await addTableRow(TABLES.pulverizacao, pulverizacao);
   }
 
