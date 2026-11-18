@@ -22,8 +22,10 @@
 
 // Grupos de produto liberados pra pulverização (pedido do usuário,
 // 10/10/2026) — compara sem acento/caixa pra não depender de como foi
-// digitado na planilha ("BIOLÓGICO" vs "BIOLOGICO", por ex.).
-const PULV_GRUPOS_PERMITIDOS = new Set(["DEFENSIVO", "BIOLOGICO", "FOLIARES"]);
+// digitado na planilha ("BIOLÓGICO" vs "BIOLOGICO", por ex.). "FERTIRRIGACAO"
+// liberado em 18/11/2026, a pedido do usuário, pra esses produtos também
+// aparecerem no combobox de Produto dessa tela.
+const PULV_GRUPOS_PERMITIDOS = new Set(["DEFENSIVO", "BIOLOGICO", "FOLIARES", "FERTIRRIGACAO"]);
 function _pulvGrupoPermitido(grupo) {
   const norm = String(grupo || "")
     .toUpperCase()
@@ -118,8 +120,18 @@ async function gerarCardPulverizacaoPng(dados) {
 
   const medCtx = document.createElement("canvas").getContext("2d");
 
+  // Data do cabeçalho aumentada ao máximo possível (pedido do usuário em
+  // 18/11/2026 — antes era 13px, quase ilegível) — mesmo tamanho/peso do
+  // título ("Pulverização"), já que os dois dividem a mesma linha do
+  // cabeçalho e cabem lado a lado nessa altura. A largura reservada pra ela
+  // agora é medida de verdade (não mais um "+90" fixo que só servia pro
+  // tamanho pequeno antigo), senão uma data maior podia encostar no título.
+  const fonteData = `700 20px ${fonte}`;
+  medCtx.font = fonteData;
+  const larguraDataHeader = medCtx.measureText(dados.dataTexto || "").width;
+
   medCtx.font = `600 20px ${fonte}`;
-  const larguraTitulo = 56 + medCtx.measureText("Pulverização").width + 90; // +90 reserva espaço da data à direita
+  const larguraTitulo = 56 + medCtx.measureText("Pulverização").width + larguraDataHeader + 24; // +24 = respiro entre título e data
   const larguraTabela = colProduto + colDosagem;
   let largura = Math.max(larguraTabela, larguraTitulo, 320);
 
@@ -194,8 +206,8 @@ async function gerarCardPulverizacaoPng(dados) {
   ctx.fillText("🚿", 22, 28);
   ctx.font = `600 20px ${fonte}`;
   ctx.fillText("Pulverização", 54, 28);
-  ctx.font = `13px ${fonte}`;
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.font = fonteData;
+  ctx.fillStyle = "#FFFFFF";
   ctx.textAlign = "right";
   ctx.fillText(dados.dataTexto || "", largura - 22, 28);
   ctx.textAlign = "left";
